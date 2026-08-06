@@ -1,0 +1,32 @@
+{
+  "name": "devverse",
+  "version": "0.1.0",
+  "description": "DevVerse — AI-powered Developer & DevOps Platform. Build • Deploy • Monitor • Learn",
+  "private": true,
+  "author": {
+    "name": "Susmitha Sivakumar",
+    "organization": "N-MARS"
+  },
+  "license": "MIT",
+  "workspaces": [
+    "backend",
+    "website"
+  ],
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:desktop\"",
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:desktop": "npm run dev --prefix=desktop",
+    "build:backend": "npm run build --workspace=backend",
+    "build:desktop": "npm run build --prefix=desktop",
+    "test:backend": "npm run test --workspace=backend",
+    "lint:backend": "npm run lint --workspace=backend",
+    "lint:desktop": "npm run lint --prefix=desktop"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.4"
+  }
+}

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- SEO & App Identity -->
+    <title>DevVerse — Build • Deploy • Monitor • Learn</title>
+    <meta name="description" content="DevVerse — AI-powered Developer & DevOps Platform. Build, deploy, monitor, and learn all in one place." />
+    <meta name="application-name" content="DevVerse" />
+    <meta name="author" content="Susmitha Sivakumar — N-MARS" />
+
+    <!-- Electron: Disable drag on entire window — drag region is set per-element in CSS -->
+    <meta http-equiv="Content-Security-Policy"
+      content="default-src 'self';
+               script-src 'self';
+               style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+               font-src 'self' https://fonts.gstatic.com;
+               img-src 'self' data: https:;
+               connect-src 'self' http://localhost:5000;" />
+
+    <!-- Google Fonts — all app fonts loaded upfront to prevent FOUT -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Roboto:wght@300;400;500;700&family=Poppins:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&ital@0;1&family=Fira+Code:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=Noto+Sans:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Cascadia Code must be loaded from a CDN or bundled locally; skipped here as fallback system font -->
+  </head>
+  <body>
+    <!-- React mounts here -->
+    <div id="root"></div>
+
+    <!-- Vite/Electron Forge injects the correct script path -->
+    <script type="module" src="/src/renderer.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,42 @@
+{
+  "compilerOptions": {
+    /* ---- Language & Target ---- */
+    "target": "ESNext",
+    "module": "ESNext",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+
+    /* ---- JSX — Required for React ---- */
+    "jsx": "react-jsx",
+
+    /* ---- Module Resolution ---- */
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "allowJs": true,
+
+    /* ---- Path Aliases ---- */
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+
+    /* ---- Output ---- */
+    "outDir": "dist",
+    "sourceMap": true,
+
+    /* ---- Type Checking ---- */
+    "strict": true,
+    "noImplicitAny": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": [
+    "electron/**/*",
+    "src/**/*",
+    "forge.config.ts",
+    "vite.*.config.ts",
+    "forge.env.d.ts"
+  ],
+  "exclude": ["node_modules", "dist", ".vite", "out"]
+}

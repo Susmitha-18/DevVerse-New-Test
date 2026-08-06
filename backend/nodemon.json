@@ -1,0 +1,7 @@
+{
+  "watch": ["src"],
+  "ignore": ["node_modules", "dist", "tests"],
+  "delay": 200,
+  "ext": "ts,json",
+  "exec": "ts-node --project tsconfig.json -r tsconfig-paths/register src/server.ts"
+}
