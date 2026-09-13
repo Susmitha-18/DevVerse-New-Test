@@ -55,6 +55,28 @@ export const authService = {
   },
 
   /**
+   * Refresh access token using httpOnly cookie
+   */
+  async refreshToken(): Promise<{ accessToken: string; sessionId: string }> {
+    const sessionId = localStorage.getItem('devverse_session_id') || undefined;
+    const response = await apiClient.post('/auth/refresh', { sessionId });
+    return response.data.data;
+  },
+
+  /**
+   * Check backend & database health readiness
+   */
+  async checkHealth(): Promise<{
+    backend: string;
+    database: { connected: boolean; state: string; database?: string };
+    environment: string;
+    version: string;
+  }> {
+    const response = await apiClient.get('/health');
+    return response.data.data;
+  },
+
+  /**
    * Request password reset link (stub)
    */
   async forgotPassword(email: string): Promise<string> {

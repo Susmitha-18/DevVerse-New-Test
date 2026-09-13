@@ -90,10 +90,7 @@ export async function generateRefreshToken(): Promise<{
  * @param hashedToken - The hash stored in the Session document
  * @returns true if they match
  */
-export async function verifyRefreshToken(
-  rawToken: string,
-  hashedToken: string,
-): Promise<boolean> {
+export async function verifyRefreshToken(rawToken: string, hashedToken: string): Promise<boolean> {
   return bcrypt.compare(rawToken, hashedToken);
 }
 
@@ -118,8 +115,8 @@ export function getRefreshTokenCookieOptions(rememberMe: boolean): {
   return {
     httpOnly: true,
     secure: env.NODE_ENV === 'production',
-    sameSite: 'strict',
-    path: '/api/v1/auth', // Cookie only sent to auth endpoints
+    sameSite: 'lax',
+    path: '/',
     maxAge: days * 24 * 60 * 60 * 1000, // milliseconds
   };
 }
@@ -136,7 +133,7 @@ export function getClearCookieOptions(): {
   return {
     httpOnly: true,
     secure: env.NODE_ENV === 'production',
-    sameSite: 'strict',
-    path: '/api/v1/auth',
+    sameSite: 'lax',
+    path: '/',
   };
 }

@@ -21,19 +21,10 @@ export const DashboardPage: React.FC = () => {
       if (window.devverse?.projects) {
         list = await window.devverse.projects.list();
       }
-
-      const localStored: LocalProjectRecord[] = JSON.parse(localStorage.getItem('devverse_local_projects') || '[]');
-      const combinedMap = new Map<string, LocalProjectRecord>();
-
-      localStored.forEach((p) => combinedMap.set(p.path, p));
-      list.forEach((p) => combinedMap.set(p.path, p));
-
-      const finalProjects = Array.from(combinedMap.values());
-      setProjects(finalProjects);
+      setProjects(list);
     } catch (err: unknown) {
       console.warn('[Dashboard Load Projects Warning]:', err);
-      const localStored: LocalProjectRecord[] = JSON.parse(localStorage.getItem('devverse_local_projects') || '[]');
-      setProjects(localStored);
+      setProjects([]);
     }
   }, []);
 

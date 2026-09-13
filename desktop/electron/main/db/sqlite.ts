@@ -27,6 +27,9 @@ export interface LocalProject {
   tags?: string[];
   hasGit: boolean;
   gitBranch?: string;
+  hasRemote?: boolean;
+  remoteUrl?: string;
+  isGitHub?: boolean;
   hasDocker: boolean;
   hasEnv: boolean;
   hasCiCd: boolean;
@@ -93,7 +96,17 @@ export const DEFAULT_APPEARANCE: AppearanceSettings = {
 export async function getLocalDatabase(): Promise<Database> {
   if (dbInstance) return dbInstance;
 
-  const userDataPath = app.getPath('userData');
+  let userDataPath = '';
+  try {
+    userDataPath = typeof app !== 'undefined' && app?.getPath ? app.getPath('userData') : '';
+  } catch {
+    userDataPath = '';
+  }
+  if (!userDataPath) {
+    const appData = process.env.APPDATA || (process.platform === 'darwin' ? path.join(process.env.HOME || '', 'Library/Application Support') : path.join(process.env.HOME || '', '.config'));
+    userDataPath = path.join(appData, 'devverse-desktop');
+  }
+
   const dbDir = path.join(userDataPath, 'storage');
 
   if (!fs.existsSync(dbDir)) {
@@ -102,8 +115,36 @@ export async function getLocalDatabase(): Promise<Database> {
 
   dbFilePath = path.join(dbDir, 'devverse_local.db');
 
+  let appPath = '';
+  try {
+    appPath = typeof app !== 'undefined' && app?.getAppPath ? app.getAppPath() : process.cwd();
+  } catch {
+    appPath = process.cwd();
+  }
+
+  // Ensure sql-wasm.wasm exists in __dirname (handles Vite dev server & production output)
+  const wasmTarget = path.join(__dirname, 'sql-wasm.wasm');
+  if (!fs.existsSync(wasmTarget)) {
+    try {
+      const wasmSource = path.join(appPath, 'node_modules/sql.js/dist/sql-wasm.wasm');
+      if (fs.existsSync(wasmSource)) {
+        fs.copyFileSync(wasmSource, wasmTarget);
+      }
+    } catch {
+      // Ignore copy error if already present or in asar
+    }
+  }
+
   const SQL = await initSqlJs({
-    locateFile: (file) => path.join(__dirname, file),
+    locateFile: (file) => {
+      const p = path.join(__dirname, file);
+      if (fs.existsSync(p)) return p;
+      const appNodeModules = path.join(appPath, 'node_modules/sql.js/dist', file);
+      if (fs.existsSync(appNodeModules)) return appNodeModules;
+      const cwdNodeModules = path.join(process.cwd(), 'node_modules/sql.js/dist', file);
+      if (fs.existsSync(cwdNodeModules)) return cwdNodeModules;
+      return file;
+    },
   });
 
   if (fs.existsSync(dbFilePath)) {
@@ -140,6 +181,9 @@ function initSchema(db: Database): void {
       tags TEXT DEFAULT '[]',
       has_git INTEGER NOT NULL DEFAULT 0,
       git_branch TEXT,
+      has_remote INTEGER NOT NULL DEFAULT 0,
+      remote_url TEXT,
+      is_github INTEGER NOT NULL DEFAULT 0,
       has_docker INTEGER NOT NULL DEFAULT 0,
       has_env INTEGER NOT NULL DEFAULT 0,
       has_cicd INTEGER NOT NULL DEFAULT 0,
@@ -160,6 +204,11 @@ function initSchema(db: Database): void {
       updated_at TEXT NOT NULL
     );
   `);
+
+  // Safe column migration for existing databases
+  try { db.run(`ALTER TABLE projects ADD COLUMN has_remote INTEGER DEFAULT 0;`); } catch {}
+  try { db.run(`ALTER TABLE projects ADD COLUMN remote_url TEXT;`); } catch {}
+  try { db.run(`ALTER TABLE projects ADD COLUMN is_github INTEGER DEFAULT 0;`); } catch {}
 
   // ── Appearance Settings Table ─────────────────────────────────────────────
   // Single-row table: always use id = 1 as the canonical settings record.
@@ -205,12 +254,12 @@ export async function saveLocalProject(project: Omit<LocalProject, 'createdAt' |
   db.run(
     `INSERT INTO projects (
       id, name, path, type, language, framework, description, tags,
-      has_git, git_branch, has_docker, has_env, has_cicd, has_readme,
+      has_git, git_branch, has_remote, remote_url, is_github, has_docker, has_env, has_cicd, has_readme,
       has_package_json, has_build_file, health_status, is_favorite, is_archived,
       is_running, project_size_bytes, total_files, dependencies_count,
       last_opened_at, custom_icon, custom_color, created_at, updated_at
     )
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       project.id,
       project.name,
@@ -222,6 +271,9 @@ export async function saveLocalProject(project: Omit<LocalProject, 'createdAt' |
       tagsJson,
       project.hasGit ? 1 : 0,
       project.gitBranch || null,
+      project.hasRemote ? 1 : 0,
+      project.remoteUrl || null,
+      project.isGitHub ? 1 : 0,
       project.hasDocker ? 1 : 0,
       project.hasEnv ? 1 : 0,
       project.hasCiCd ? 1 : 0,
@@ -293,6 +345,9 @@ export async function getAllLocalProjects(): Promise<LocalProject[]> {
       tags: parsedTags,
       hasGit: Boolean(row[getIdx('has_git')]),
       gitBranch: (row[getIdx('git_branch')] as string) || undefined,
+      hasRemote: Boolean(row[getIdx('has_remote')]),
+      remoteUrl: (row[getIdx('remote_url')] as string) || undefined,
+      isGitHub: Boolean(row[getIdx('is_github')]),
       hasDocker: Boolean(row[getIdx('has_docker')]),
       hasEnv: Boolean(row[getIdx('has_env')]),
       hasCiCd: Boolean(row[getIdx('has_cicd')]),
@@ -320,12 +375,53 @@ export async function getProjectById(id: string): Promise<LocalProject | null> {
   return projects.find((p) => p.id === id) || null;
 }
 
+export async function getProjectByPath(projectPath: string): Promise<LocalProject | null> {
+  const projects = await getAllLocalProjects();
+  const normalizedTarget = path.normalize(projectPath).toLowerCase();
+  return projects.find((p) => path.normalize(p.path).toLowerCase() === normalizedTarget) || null;
+}
+
 export async function deleteLocalProject(id: string): Promise<boolean> {
   const db = await getLocalDatabase();
   db.run(`DELETE FROM projects WHERE id = ?`, [id]);
   saveDatabaseToDisk();
   return true;
 }
+
+export async function updateLocalProject(id: string, updates: Partial<LocalProject>): Promise<LocalProject | null> {
+  const existing = await getProjectById(id);
+  if (!existing) return null;
+
+  const merged = {
+    ...existing,
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+
+  return await saveLocalProject(merged);
+}
+
+export async function checkPathExists(dirPath: string): Promise<boolean> {
+  try {
+    return fs.existsSync(dirPath);
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteProjectFromDisk(dirPath: string): Promise<boolean> {
+  try {
+    if (!fs.existsSync(dirPath)) {
+      return false;
+    }
+    fs.rmSync(dirPath, { recursive: true, force: true });
+    return true;
+  } catch (err) {
+    console.error('[deleteProjectFromDisk Error]:', err);
+    throw err;
+  }
+}
+
 
 // ─── Appearance Settings Operations ───────────────────────────────────────────
 

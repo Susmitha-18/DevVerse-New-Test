@@ -1,106 +1,62 @@
 /**
- * Storage & Technology Statistics Dashboard Section — DevVerse Workspace Hub
+ * Enterprise Workspace Statistics Cards Component — DevVerse Workspace Hub
  */
 
 import React from 'react';
-import { LocalProjectRecord } from '@/types/electron.types';
 
 interface StorageAndStatsProps {
-  workspaces: LocalProjectRecord[];
+  totalWorkspaces: number;
+  gitProjects: number;
+  dockerProjects: number;
+  favoriteProjects: number;
+  archivedProjects: number;
+  recentlyActive: number;
 }
 
-export const StorageAndStats: React.FC<StorageAndStatsProps> = ({ workspaces }) => {
-  // Language Frequency Counts
-  const langCounts: Record<string, number> = {};
-  workspaces.forEach((w) => {
-    const lang = w.language || 'Unknown';
-    langCounts[lang] = (langCounts[lang] || 0) + 1;
-  });
-
-  const sortedLangs = Object.entries(langCounts).sort((a, b) => b[1] - a[1]);
+export const StorageAndStats: React.FC<StorageAndStatsProps> = ({
+  totalWorkspaces,
+  gitProjects,
+  dockerProjects,
+  favoriteProjects,
+  archivedProjects,
+  recentlyActive,
+}) => {
+  const cards = [
+    { label: 'Total Workspaces', value: String(totalWorkspaces), sub: 'Indexed in SQLite', color: '#38bdf8' },
+    { label: 'Git Projects', value: String(gitProjects), sub: 'Version Controlled', color: '#10b981' },
+    { label: 'Docker Projects', value: String(dockerProjects), sub: 'Containerized', color: '#06b6d4' },
+    { label: 'Favorite Projects', value: String(favoriteProjects), sub: 'Starred', color: '#fbbf24' },
+    { label: 'Archived Projects', value: String(archivedProjects), sub: 'Cold Storage', color: '#64748b' },
+    { label: 'Recently Active', value: String(recentlyActive), sub: 'Active This Week', color: '#a855f7' },
+  ];
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 24, marginBottom: 24 }}>
-      {/* Storage Information */}
-      <div className="enterprise-card" style={{ padding: 16 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-            💾 Storage Information
-          </h4>
-          <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', fontWeight: 600 }}>
-            SQLite WASM
-          </span>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, fontSize: 11 }}>
-          <div style={infoBoxStyle}>
-            <span style={{ color: 'var(--text-muted)' }}>Workspace Count</span>
-            <strong style={{ color: 'var(--text-primary)', marginTop: 2 }}>{workspaces.length} Projects</strong>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12, marginBottom: 20 }}>
+      {cards.map((c) => (
+        <div
+          key={c.label}
+          className="enterprise-card"
+          style={{
+            padding: '14px 16px',
+            borderRadius: 10,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border-subtle)',
+          }}
+        >
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            {c.label}
           </div>
-          <div style={infoBoxStyle}>
-            <span style={{ color: 'var(--text-muted)' }}>Database Size</span>
-            <strong style={{ color: 'var(--text-primary)', marginTop: 2 }}>~1.2 MB</strong>
+          <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)' }}>
+            {c.value}
           </div>
-          <div style={infoBoxStyle}>
-            <span style={{ color: 'var(--text-muted)' }}>Last Backup</span>
-            <strong style={{ color: '#34d399', marginTop: 2 }}>Today 16:00</strong>
-          </div>
-          <div style={infoBoxStyle}>
-            <span style={{ color: 'var(--text-muted)' }}>Last Sync</span>
-            <strong style={{ color: '#34d399', marginTop: 2 }}>Local Embedded</strong>
+          <div style={{ fontSize: 10, color: c.color, fontWeight: 600 }}>
+            {c.sub}
           </div>
         </div>
-
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: 10 }}>
-          Location: %APPDATA%\devverse-desktop\storage\devverse_local.db
-        </div>
-      </div>
-
-      {/* Technology Statistics */}
-      <div className="enterprise-card" style={{ padding: 16 }}>
-        <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0, marginBottom: 12 }}>
-          📊 Workspace Statistics by Language
-        </h4>
-
-        {sortedLangs.length === 0 ? (
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>No statistics available yet.</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {sortedLangs.map(([lang, count]) => {
-              const pct = Math.round((count / workspaces.length) * 100);
-              return (
-                <div key={lang} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', width: 80 }}>
-                    {lang}
-                  </span>
-                  <div style={{ flex: 1, height: 6, borderRadius: 3, background: 'var(--bg-app)', overflow: 'hidden' }}>
-                    <div
-                      style={{
-                        height: '100%',
-                        width: `${pct}%`,
-                        borderRadius: 3,
-                        background: 'linear-gradient(90deg, #38bdf8, #6366f1)',
-                      }}
-                    />
-                  </div>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)', width: 40, textAlign: 'right' }}>
-                    {count}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      ))}
     </div>
   );
-};
-
-const infoBoxStyle: React.CSSProperties = {
-  padding: '8px 10px',
-  borderRadius: 6,
-  background: 'var(--bg-app)',
-  border: '1px solid var(--border-subtle)',
-  display: 'flex',
-  flexDirection: 'column',
 };

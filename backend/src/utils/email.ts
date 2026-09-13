@@ -1,6 +1,6 @@
 /**
  * Nodemailer Email Service — DevVerse
- * Handles sending transactional emails (OTP codes, security alerts).
+ * Handles sending transactional emails (User Password Reset OTP, Admin Vault OTP, security alerts).
  */
 
 import nodemailer from 'nodemailer';
@@ -25,7 +25,61 @@ export interface SendOtpEmailOptions {
 }
 
 /**
- * Send Admin Password Reset Email OTP
+ * Send Standard User Password Reset Email OTP
+ */
+export async function sendUserPasswordResetOtpEmail(
+  options: SendOtpEmailOptions,
+): Promise<boolean> {
+  const { toEmail, recipientName, otpCode } = options;
+
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; background-color: #070709; color: #f8fafc; padding: 32px; border-radius: 16px;">
+      <div style="max-width: 500px; margin: 0 auto; background-color: #0f172a; border: 1px solid #1e293b; padding: 32px; border-radius: 16px;">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <div style="display: inline-block; width: 48px; height: 48px; background: linear-gradient(135deg, #38bdf8, #2563eb); border-radius: 12px; line-height: 48px; font-weight: bold; font-size: 20px; color: #fff;">DV</div>
+          <h2 style="color: #f8fafc; font-size: 22px; margin-top: 12px;">DevVerse Account Recovery</h2>
+          <p style="color: #38bdf8; font-size: 12px; font-weight: bold; letter-spacing: 1px;">PASSWORD RESET VERIFICATION CODE</p>
+        </div>
+
+        <p style="font-size: 14px; color: #cbd5e1;">Hello ${recipientName},</p>
+        <p style="font-size: 14px; color: #cbd5e1;">We received a request to reset your DevVerse password. Please use the 6-digit verification code below to reset your account password:</p>
+
+        <div style="text-align: center; background-color: #1e293b; padding: 20px; border-radius: 12px; margin: 24px 0; border: 1px solid #38bdf8;">
+          <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #38bdf8;">${otpCode}</span>
+        </div>
+
+        <p style="font-size: 12px; color: #94a3b8; text-align: center;">This OTP code is valid for <strong>10 minutes</strong>. If you did not request a password reset, you can safely ignore this email.</p>
+
+        <hr style="border: none; border-top: 1px solid #1e293b; margin: 24px 0;" />
+        <p style="font-size: 11px; color: #64748b; text-align: center;">© 2026 DevVerse • An Original Product by N-MARS • Developed by Susmitha Sivakumar</p>
+      </div>
+    </div>
+  `;
+
+  try {
+    if (env.SMTP_PASS) {
+      await transporter.sendMail({
+        from: `"DevVerse Security" <${env.SMTP_USER}>`,
+        to: toEmail,
+        subject: '🔑 Password Reset OTP Code — DevVerse',
+        html: htmlContent,
+      });
+      logger.info(`[Email Service] 📩 User Password Reset OTP sent to: ${toEmail}`);
+      return true;
+    }
+
+    logger.warn(
+      `[Email Service] SMTP_PASS not set in .env. Email dispatch skipped. Target: ${toEmail}`,
+    );
+    return false;
+  } catch (error) {
+    logger.error(`[Email Service] Failed to send email to ${toEmail}:`, error);
+    return false;
+  }
+}
+
+/**
+ * Send Admin Password Reset Email OTP (N-MARS Vault)
  */
 export async function sendAdminPasswordOtpEmail(options: SendOtpEmailOptions): Promise<boolean> {
   const { toEmail, recipientName, otpCode } = options;
@@ -62,11 +116,13 @@ export async function sendAdminPasswordOtpEmail(options: SendOtpEmailOptions): P
         subject: '🔒 Admin Password Change OTP Verification — DevVerse N-MARS Vault',
         html: htmlContent,
       });
-      logger.info(`[Email Service] 📩 Real SMTP Email sent successfully to: ${toEmail}`);
+      logger.info(`[Email Service] 📩 Real SMTP Admin OTP Email sent to: ${toEmail}`);
       return true;
     }
 
-    logger.warn(`[Email Service] SMTP_PASS not set in .env. Email dispatch skipped. Target: ${toEmail}`);
+    logger.warn(
+      `[Email Service] SMTP_PASS not set in .env. Email dispatch skipped. Target: ${toEmail}`,
+    );
     return false;
   } catch (error) {
     logger.error(`[Email Service] Failed to send email to ${toEmail}:`, error);

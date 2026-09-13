@@ -9,6 +9,7 @@ import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { AppearancePage } from './AppearancePage';
+import { SystemHealthPage } from './SystemHealthPage';
 
 const SETTINGS_NAV = [
   {
@@ -19,6 +20,16 @@ const SETTINGS_NAV = [
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <circle cx="12" cy="12" r="3" />
         <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83" />
+      </svg>
+    ),
+  },
+  {
+    id: 'system-health',
+    label: 'System Health',
+    path: '/dashboard/settings/system-health',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
       </svg>
     ),
   },
@@ -48,6 +59,8 @@ export const SettingsPage: React.FC = () => {
     switch (activeSection) {
       case 'appearance':
         return <AppearancePage />;
+      case 'system-health':
+        return <SystemHealthPage />;
       default:
         return <AppearancePage />;
     }

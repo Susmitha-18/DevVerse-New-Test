@@ -94,10 +94,7 @@ const userSchema = new Schema<IUserDocument>(
       unique: true,
       trim: true,
       lowercase: true,
-      match: [
-        /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-        'Please provide a valid email address',
-      ],
+      match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Please provide a valid email address'],
     },
 
     password: {
@@ -211,16 +208,16 @@ userSchema.pre('save', async function (next) {
   }
 });
 
-userSchema.methods.comparePassword = async function (
-  candidatePassword: string,
-): Promise<boolean> {
+userSchema.methods.comparePassword = async function (candidatePassword: string): Promise<boolean> {
   return bcrypt.compare(candidatePassword, this.password as string);
 };
 
-userSchema.methods.toSafeObject = function () {
-  const obj = this.toObject();
-  const { password: _p, totpSecret: _t, ...safeObj } = obj as Record<string, unknown>;
-  return safeObj;
+userSchema.methods.toSafeObject = function (): Record<string, unknown> {
+  const doc = this as mongoose.Document;
+  const obj = doc.toObject() as Record<string, unknown>;
+  delete obj.password;
+  delete obj.totpSecret;
+  return obj;
 };
 
 export const User = mongoose.model<IUserDocument>('User', userSchema);

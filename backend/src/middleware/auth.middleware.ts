@@ -60,7 +60,7 @@ export const authenticate = (req: Request, _res: Response, next: NextFunction): 
     // ── 1. Extract token from Authorization header ─────────────────────────
     const authHeader = req.headers.authorization;
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!authHeader?.startsWith('Bearer ')) {
       throw new AppError(
         'Authentication required. Please log in to access this resource.',
         HttpStatus.UNAUTHORIZED,

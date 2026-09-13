@@ -6,6 +6,7 @@ import React from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from '@/context/AuthContext';
 import { ThemeProvider } from '@/context/ThemeContext';
+import { ActiveWorkspaceProvider } from '@/context/ActiveWorkspaceContext';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { TitleBar } from '@/components/titlebar/TitleBar';
 
@@ -16,6 +17,7 @@ import { RegisterPage } from '@/pages/auth/RegisterPage';
 import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage';
 import { DashboardPage } from '@/pages/dashboard/DashboardPage';
 import { WorkspacesPage } from '@/pages/dashboard/WorkspacesPage';
+import { WorkspaceOverviewPage } from '@/pages/dashboard/WorkspaceOverviewPage';
 import { GitPage } from '@/pages/dashboard/GitPage';
 import { AdminDashboardPage } from '@/pages/admin/AdminDashboardPage';
 import { SettingsPage } from '@/pages/dashboard/settings/SettingsPage';
@@ -24,9 +26,11 @@ export const App: React.FC = () => {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <HashRouter>
-          {/* Custom title bar — always on top, always themed */}
-          <TitleBar />
+        <ActiveWorkspaceProvider>
+          <HashRouter>
+            {/* Custom title bar — always on top, always themed */}
+            <TitleBar />
+
           <Routes>
             {/* Startup Splash */}
             <Route path="/" element={<SplashScreen />} />
@@ -67,6 +71,16 @@ export const App: React.FC = () => {
               }
             />
 
+            {/* Workspace Overview — Active Workspace Context */}
+            <Route
+              path="/dashboard/workspace"
+              element={
+                <ProtectedRoute>
+                  <WorkspaceOverviewPage />
+                </ProtectedRoute>
+              }
+            />
+
             {/* Settings — Appearance */}
             <Route
               path="/dashboard/settings"
@@ -78,6 +92,14 @@ export const App: React.FC = () => {
             />
             <Route
               path="/dashboard/settings/appearance"
+              element={
+                <ProtectedRoute>
+                  <SettingsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard/settings/system-health"
               element={
                 <ProtectedRoute>
                   <SettingsPage />
@@ -99,6 +121,7 @@ export const App: React.FC = () => {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </HashRouter>
+        </ActiveWorkspaceProvider>
       </AuthProvider>
     </ThemeProvider>
   );

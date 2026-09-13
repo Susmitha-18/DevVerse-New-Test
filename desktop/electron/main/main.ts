@@ -37,21 +37,58 @@
 
 import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron';
 import path from 'node:path';
+import fs from 'node:fs';
 import started from 'electron-squirrel-startup';
 import {
   saveLocalProject,
   getAllLocalProjects,
   deleteLocalProject,
+  updateLocalProject,
+  checkPathExists,
+  deleteProjectFromDisk,
+  getProjectByPath,
   getAppearance,
   saveAppearance,
 } from './db/sqlite';
-import { scanLocalDirectory } from './services/scanner.service';
+import { scanLocalDirectory, scanParentDirectory } from './services/scanner.service';
 import {
   getGitRepositoryState,
   switchGitBranch,
   createGitBranch,
   stageAndCommit,
+  stageGitFile,
+  unstageGitFile,
+  stageAllGitFiles,
+  unstageAllGitFiles,
+  getGitFileDiff,
+  initGitRepository,
+  pullGitRemote,
+  pushGitRemote,
+  addGitRemote,
+  setGitRemoteUrl,
+  removeGitRemote,
 } from './services/git.service';
+
+/**
+ * Create a new folder on disk for New Workspace action
+ */
+ipcMain.handle('project:create-folder', (_event, parentDir: string, folderName: string) => {
+  const fullPath = path.join(parentDir, folderName);
+  if (!fs.existsSync(fullPath)) {
+    fs.mkdirSync(fullPath, { recursive: true });
+  }
+  return fullPath;
+});
+
+
+
+/**
+ * Recursively scan parent directory for child project folders
+ */
+ipcMain.handle('project:scan-parent-directory', (_event, parentPath: string) => {
+  return scanParentDirectory(parentPath);
+});
+
 
 // ─── Windows Installer Handling ────────────────────────────────────────────────
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -85,7 +122,7 @@ function createWindow(): void {
 
     // ── Start hidden — show after ready-to-show ───────────────────────────
     // This prevents the blank white window flashing before content loads
-    show: false,
+    show: true,
 
     // ── Icons ─────────────────────────────────────────────────────────────
     icon: path.join(__dirname, '../../public/assets/nmars_logo.png'),
@@ -219,10 +256,113 @@ ipcMain.handle('project:list', async () => {
 });
 
 /**
- * Delete project from embedded SQLite database
+ * Delete project from embedded SQLite database (Remove from WorkHub)
  */
 ipcMain.handle('project:delete', async (_event, projectId: string) => {
   return await deleteLocalProject(projectId);
+});
+
+/**
+ * Update existing project record in SQLite
+ */
+ipcMain.handle('project:update', async (_event, projectId: string, updates: Record<string, unknown>) => {
+  return await updateLocalProject(projectId, updates);
+});
+
+/**
+ * Rescan project directory on disk and update SQLite record
+ */
+ipcMain.handle('project:rescan', async (_event, projectId: string, dirPath: string) => {
+  const scanResult = await scanLocalDirectory(dirPath);
+  return await updateLocalProject(projectId, {
+    name: scanResult.name,
+    type: scanResult.type,
+    language: scanResult.language,
+    framework: scanResult.framework,
+    description: scanResult.description,
+    hasGit: scanResult.hasGit,
+    gitBranch: scanResult.gitBranch,
+    hasRemote: scanResult.hasRemote,
+    remoteUrl: scanResult.remoteUrl,
+    isGitHub: scanResult.isGitHub,
+    hasDocker: scanResult.hasDocker,
+    hasEnv: scanResult.hasEnv,
+    hasCiCd: scanResult.hasCiCd,
+    hasReadme: scanResult.hasReadme,
+    hasPackageJson: scanResult.hasPackageJson,
+    hasBuildFile: scanResult.hasBuildFile,
+    healthStatus: scanResult.healthStatus,
+    projectSizeBytes: scanResult.projectSizeBytes,
+    totalFiles: scanResult.totalFiles,
+    dependenciesCount: scanResult.dependenciesCount,
+  });
+});
+
+/**
+ * Check if workspace path exists on disk
+ */
+ipcMain.handle('project:check-exists', async (_event, dirPath: string) => {
+  return await checkPathExists(dirPath);
+});
+
+/**
+ * Get existing project by path (for duplicate checking)
+ */
+ipcMain.handle('project:get-by-path', async (_event, dirPath: string) => {
+  return await getProjectByPath(dirPath);
+});
+
+/**
+ * Delete project folder from computer disk (destructive) AND remove from SQLite
+ */
+ipcMain.handle('project:delete-from-disk', async (_event, projectId: string, dirPath: string) => {
+  await deleteProjectFromDisk(dirPath);
+  return await deleteLocalProject(projectId);
+});
+
+
+/**
+ * Open local folder in OS file explorer
+ */
+ipcMain.handle('project:open-explorer', async (_event, dirPath: string) => {
+  return await shell.openPath(dirPath);
+});
+
+/**
+ * Open workspace folder in VS Code
+ */
+ipcMain.handle('shell:open-vscode', async (_event, dirPath: string) => {
+  const { exec } = await import('child_process');
+  exec(`code "${dirPath}"`, (err) => {
+    if (err) void shell.openPath(dirPath);
+  });
+  return true;
+});
+
+/**
+ * Open workspace folder in Cursor
+ */
+ipcMain.handle('shell:open-cursor', async (_event, dirPath: string) => {
+  const { exec } = await import('child_process');
+  exec(`cursor "${dirPath}"`, (err) => {
+    if (err) void shell.openPath(dirPath);
+  });
+  return true;
+});
+
+/**
+ * Open terminal at workspace path
+ */
+ipcMain.handle('shell:open-terminal', async (_event, dirPath: string) => {
+  const { exec } = await import('child_process');
+  if (process.platform === 'win32') {
+    exec(`start cmd /K "cd /d ${dirPath}"`);
+  } else if (process.platform === 'darwin') {
+    exec(`open -a Terminal "${dirPath}"`);
+  } else {
+    exec(`x-terminal-emulator --working-directory="${dirPath}"`);
+  }
+  return true;
 });
 
 // ─── Git Handlers ─────────────────────────────────────────────────────────────
@@ -253,6 +393,50 @@ ipcMain.handle('git:create-branch', (_event, projectPath: string, branchName: st
  */
 ipcMain.handle('git:commit', (_event, projectPath: string, message: string, filesToStage?: string[]) => {
   return stageAndCommit(projectPath, message, filesToStage);
+});
+
+ipcMain.handle('git:stage-file', (_event, projectPath: string, filePath: string) => {
+  return stageGitFile(projectPath, filePath);
+});
+
+ipcMain.handle('git:unstage-file', (_event, projectPath: string, filePath: string) => {
+  return unstageGitFile(projectPath, filePath);
+});
+
+ipcMain.handle('git:stage-all', (_event, projectPath: string) => {
+  return stageAllGitFiles(projectPath);
+});
+
+ipcMain.handle('git:unstage-all', (_event, projectPath: string) => {
+  return unstageAllGitFiles(projectPath);
+});
+
+ipcMain.handle('git:get-diff', (_event, projectPath: string, filePath: string, staged?: boolean) => {
+  return getGitFileDiff(projectPath, filePath, staged);
+});
+
+ipcMain.handle('git:init', (_event, projectPath: string) => {
+  return initGitRepository(projectPath);
+});
+
+ipcMain.handle('git:pull', (_event, projectPath: string) => {
+  return pullGitRemote(projectPath);
+});
+
+ipcMain.handle('git:push', (_event, projectPath: string) => {
+  return pushGitRemote(projectPath);
+});
+
+ipcMain.handle('git:add-remote', async (_event, projectPath: string, arg2: string, arg3?: string) => {
+  return await addGitRemote(projectPath, arg2, arg3);
+});
+
+ipcMain.handle('git:set-remote-url', async (_event, projectPath: string, remoteName: string, remoteUrl: string) => {
+  return await setGitRemoteUrl(projectPath, remoteName, remoteUrl);
+});
+
+ipcMain.handle('git:remove-remote', async (_event, projectPath: string, remoteName?: string) => {
+  return await removeGitRemote(projectPath, remoteName || 'origin');
 });
 
 /**

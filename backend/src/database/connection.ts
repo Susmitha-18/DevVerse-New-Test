@@ -31,7 +31,7 @@ import mongoose from 'mongoose';
 import { env } from '@/config/env';
 import { logger } from '@/utils/logger';
 
-// ─── Connection Options ───────────────────────────────────────────────────────
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 const MONGOOSE_OPTIONS: mongoose.ConnectOptions = {
   // How long to wait for a connection before timing out
@@ -46,7 +46,11 @@ const MONGOOSE_OPTIONS: mongoose.ConnectOptions = {
   // Minimum number of connections to keep open
   minPoolSize: 2,
 
-  // Automatically try to reconnect when disconnected
+  // SSL/TLS options for compatibility with networks/proxies/firewalls
+  ssl: true,
+  tls: true,
+  tlsAllowInvalidCertificates: true,
+
   autoIndex: env.NODE_ENV !== 'production', // Disable in production for performance
 };
 
@@ -81,9 +85,7 @@ export async function connectDatabase(retries = 5, delay = 2000): Promise<void> 
       return;
     } catch (error) {
       const err = error as Error;
-      logger.error(
-        `[MongoDB] ❌ Connection attempt ${attempt}/${retries} failed: ${err.message}`,
-      );
+      logger.error(`[MongoDB] ❌ Connection attempt ${attempt}/${retries} failed: ${err.message}`);
 
       if (attempt === retries) {
         throw new Error(
@@ -149,7 +151,7 @@ export function getDatabaseStatus(): {
   };
 
   return {
-    connected: mongoose.connection.readyState === 1,
+    connected: Number(mongoose.connection.readyState) === 1,
     state: stateMap[mongoose.connection.readyState] ?? 'unknown',
     database: mongoose.connection.name,
   };

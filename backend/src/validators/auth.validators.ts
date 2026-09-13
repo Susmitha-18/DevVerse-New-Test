@@ -28,18 +28,14 @@ import { ApiResponse, HttpStatus, ValidationError } from '@/types';
  * Must be the LAST item in every validator array.
  * Collects all validation errors and responds with 422 if any exist.
  */
-export const handleValidationErrors = (
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): void => {
+export const handleValidationErrors = (req: Request, res: Response, next: NextFunction): void => {
   const errors = validationResult(req);
 
   if (!errors.isEmpty()) {
     const validationErrors: ValidationError[] = errors.array().map((err) => ({
       field: err.type === 'field' ? err.path : 'unknown',
       message: err.msg as string,
-      value: err.type === 'field' ? err.value : undefined,
+      value: err.type === 'field' ? (err.value as unknown) : undefined,
     }));
 
     const response: ApiResponse = {
@@ -139,14 +135,9 @@ export const loginValidator = [
     .withMessage('Please provide a valid email address')
     .normalizeEmail(),
 
-  body('password')
-    .notEmpty()
-    .withMessage('Password is required'),
+  body('password').notEmpty().withMessage('Password is required'),
 
-  body('rememberMe')
-    .optional()
-    .isBoolean()
-    .withMessage('Remember me must be a boolean'),
+  body('rememberMe').optional().isBoolean().withMessage('Remember me must be a boolean'),
 
   handleValidationErrors,
 ];
@@ -172,9 +163,7 @@ export const forgotPasswordValidator = [
 // ─── Change Password Validator ────────────────────────────────────────────────
 
 export const changePasswordValidator = [
-  body('currentPassword')
-    .notEmpty()
-    .withMessage('Current password is required'),
+  body('currentPassword').notEmpty().withMessage('Current password is required'),
 
   body('newPassword')
     .notEmpty()

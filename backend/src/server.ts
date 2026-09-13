@@ -25,11 +25,7 @@
 import { app } from './app';
 import { env } from '@/config/env';
 import { logger } from '@/utils/logger';
-import {
-  connectDatabase,
-  disconnectDatabase,
-  registerDatabaseEvents,
-} from '@/database/connection';
+import { connectDatabase, disconnectDatabase, registerDatabaseEvents } from '@/database/connection';
 
 // ─── Catch Synchronous Errors Before Server Starts ───────────────────────────
 

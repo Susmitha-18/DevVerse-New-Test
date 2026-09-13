@@ -13,6 +13,9 @@ export interface LocalProjectRecord {
   tags?: string[];       // JSON string array in SQLite
   hasGit: boolean;
   gitBranch?: string;
+  hasRemote?: boolean;
+  remoteUrl?: string;
+  isGitHub?: boolean;
   hasDocker: boolean;
   hasEnv: boolean;
   hasCiCd: boolean;
@@ -38,11 +41,17 @@ export interface DirectoryScanResult {
   path: string;
   type: string;
   language: string;
+  languageBreakdown?: string;
   framework?: string;
+  projectType?: string;
+  confidence?: 'High' | 'Medium' | 'Low';
   description?: string;
   tags?: string[];
   hasGit: boolean;
   gitBranch?: string;
+  hasRemote?: boolean;
+  remoteUrl?: string;
+  isGitHub?: boolean;
   hasDocker: boolean;
   hasEnv: boolean;
   hasCiCd: boolean;
@@ -74,6 +83,19 @@ export interface GitRepositoryState {
   ahead: number;
   behind: number;
   recentCommits: GitCommitRecord[];
+  hasRemote: boolean;
+  remoteName?: string;
+  remoteUrl?: string;
+  isGitHub: boolean;
+  hasUpstream: boolean;
+  upstreamBranch?: string;
+}
+
+export interface GitRemoteResult {
+  success: boolean;
+  remoteName: string;
+  remoteUrl: string;
+  isGitHub: boolean;
 }
 
 export interface DevVerseElectronAPI {
@@ -87,11 +109,21 @@ export interface DevVerseElectronAPI {
 
   projects: {
     selectFolder: () => Promise<string | null>;
+    createFolder: (parentDir: string, folderName: string) => Promise<string>;
     scanDirectory: (dirPath: string) => Promise<DirectoryScanResult>;
+    scanParentDirectory: (parentPath: string) => Promise<DirectoryScanResult[]>;
     save: (projectData: Omit<LocalProjectRecord, 'createdAt' | 'updatedAt'>) => Promise<LocalProjectRecord>;
+    update: (id: string, updates: Partial<LocalProjectRecord>) => Promise<LocalProjectRecord | null>;
+    rescan: (id: string, dirPath: string) => Promise<LocalProjectRecord | null>;
+    checkExists: (dirPath: string) => Promise<boolean>;
+    getByPath: (dirPath: string) => Promise<LocalProjectRecord | null>;
     list: () => Promise<LocalProjectRecord[]>;
     delete: (id: string) => Promise<boolean>;
+    deleteFromDisk: (id: string, dirPath: string) => Promise<boolean>;
     openExplorer: (path: string) => Promise<string>;
+    openVsCode: (path: string) => Promise<boolean>;
+    openCursor: (path: string) => Promise<boolean>;
+    openTerminal: (path: string) => Promise<boolean>;
   };
 
   git: {
@@ -99,6 +131,17 @@ export interface DevVerseElectronAPI {
     switchBranch: (projectPath: string, branchName: string) => Promise<void>;
     createBranch: (projectPath: string, branchName: string) => Promise<void>;
     commit: (projectPath: string, message: string, filesToStage?: string[]) => Promise<void>;
+    stageFile: (projectPath: string, filePath: string) => Promise<void>;
+    unstageFile: (projectPath: string, filePath: string) => Promise<void>;
+    stageAll: (projectPath: string) => Promise<void>;
+    unstageAll: (projectPath: string) => Promise<void>;
+    getFileDiff: (projectPath: string, filePath: string, staged?: boolean) => Promise<string>;
+    initRepo: (projectPath: string) => Promise<void>;
+    pull: (projectPath: string) => Promise<void>;
+    push: (projectPath: string) => Promise<void>;
+    addRemote: (projectPath: string, remoteName: string, remoteUrl: string) => Promise<GitRemoteResult>;
+    setRemoteUrl: (projectPath: string, remoteName: string, remoteUrl: string) => Promise<GitRemoteResult>;
+    removeRemote: (projectPath: string, remoteName?: string) => Promise<{ success: boolean; remoteName: string }>;
   };
 
   minimize: () => Promise<void>;

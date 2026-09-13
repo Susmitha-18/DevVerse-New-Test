@@ -44,17 +44,25 @@ export interface AnonymousAdminMetrics {
  * Returns strictly anonymous statistics. NO PII (No emails, phones, user IDs, or login history).
  */
 export async function getAnonymousMetrics(): Promise<AnonymousAdminMetrics> {
-  const [totalUsers, activeUsers, suspendedUsers, totalSessions, githubCount, dockerCount, awsCount, groqCount] =
-    await Promise.all([
-      User.countDocuments(),
-      User.countDocuments({ accountStatus: 'active' }),
-      User.countDocuments({ accountStatus: 'suspended' }),
-      Session.countDocuments({ isActive: true }),
-      User.countDocuments({ 'connectedServices.github.connected': true }),
-      User.countDocuments({ 'connectedServices.docker.connected': true }),
-      User.countDocuments({ 'connectedServices.aws.connected': true }),
-      User.countDocuments({ 'connectedServices.groq.connected': true }),
-    ]);
+  const [
+    totalUsers,
+    activeUsers,
+    suspendedUsers,
+    totalSessions,
+    githubCount,
+    dockerCount,
+    awsCount,
+    groqCount,
+  ] = await Promise.all([
+    User.countDocuments(),
+    User.countDocuments({ accountStatus: 'active' }),
+    User.countDocuments({ accountStatus: 'suspended' }),
+    Session.countDocuments({ isActive: true }),
+    User.countDocuments({ 'connectedServices.github.connected': true }),
+    User.countDocuments({ 'connectedServices.docker.connected': true }),
+    User.countDocuments({ 'connectedServices.aws.connected': true }),
+    User.countDocuments({ 'connectedServices.groq.connected': true }),
+  ]);
 
   return {
     totalRegisteredUsers: totalUsers,
@@ -84,7 +92,10 @@ export async function getAnonymousMetrics(): Promise<AnonymousAdminMetrics> {
 /**
  * Verify admin password before MFA. Lockout after 3 failures for 5 minutes.
  */
-export async function verifyVaultPassword(adminId: string, passwordInput: string): Promise<{ requiresMfa: boolean; totpSetupRequired: boolean; qrCodeUrl?: string }> {
+export async function verifyVaultPassword(
+  adminId: string,
+  passwordInput: string,
+): Promise<{ requiresMfa: boolean; totpSetupRequired: boolean; qrCodeUrl?: string }> {
   const admin = await User.findById(adminId).select('+password +totpSecret');
 
   if (!admin || admin.role !== UserRole.ADMIN) {
@@ -254,7 +265,10 @@ export async function toggleUserBan(adminId: string, targetUserId: string): Prom
     throw new AppError('Cannot ban the administrator account.', HttpStatus.FORBIDDEN);
   }
 
-  const newStatus = targetUser.accountStatus === AccountStatus.ACTIVE ? AccountStatus.SUSPENDED : AccountStatus.ACTIVE;
+  const newStatus =
+    targetUser.accountStatus === AccountStatus.ACTIVE
+      ? AccountStatus.SUSPENDED
+      : AccountStatus.ACTIVE;
   targetUser.accountStatus = newStatus;
   await targetUser.save();
 
@@ -344,7 +358,10 @@ export async function resetAdminPasswordWithOtp(
   }
 
   if (!admin.passwordResetOtp || !admin.passwordResetExpires) {
-    throw new AppError('No active OTP request found. Please request a new OTP.', HttpStatus.BAD_REQUEST);
+    throw new AppError(
+      'No active OTP request found. Please request a new OTP.',
+      HttpStatus.BAD_REQUEST,
+    );
   }
 
   if (admin.passwordResetExpires < new Date()) {

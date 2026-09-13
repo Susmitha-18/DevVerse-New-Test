@@ -30,6 +30,14 @@ const config: Config = {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
 
+  transform: {
+    '^.+\\.[tj]sx?$': ['ts-jest', { tsconfig: 'tsconfig.json', allowJs: true }],
+  },
+
+  transformIgnorePatterns: [
+    'node_modules/(?!(@scure|@noble|otplib|@otplib)/)',
+  ],
+
   // Clear mocks between each test
   clearMocks: true,
   resetMocks: true,

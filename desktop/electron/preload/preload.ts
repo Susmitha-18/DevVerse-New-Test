@@ -109,12 +109,23 @@ const devverseAPI = {
 
   projects: {
     selectFolder: (): Promise<string | null> => ipcRenderer.invoke('dialog:select-folder'),
+    createFolder: (parentDir: string, folderName: string): Promise<string> => ipcRenderer.invoke('project:create-folder', parentDir, folderName),
     scanDirectory: (dirPath: string): Promise<unknown> => ipcRenderer.invoke('project:scan-directory', dirPath),
+    scanParentDirectory: (parentPath: string): Promise<unknown[]> => ipcRenderer.invoke('project:scan-parent-directory', parentPath),
     save: (projectData: unknown): Promise<unknown> => ipcRenderer.invoke('project:save', projectData),
+    update: (id: string, updates: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke('project:update', id, updates),
+    rescan: (id: string, dirPath: string): Promise<unknown> => ipcRenderer.invoke('project:rescan', id, dirPath),
+    checkExists: (dirPath: string): Promise<boolean> => ipcRenderer.invoke('project:check-exists', dirPath),
+    getByPath: (dirPath: string): Promise<unknown> => ipcRenderer.invoke('project:get-by-path', dirPath),
     list: (): Promise<unknown[]> => ipcRenderer.invoke('project:list'),
     delete: (id: string): Promise<boolean> => ipcRenderer.invoke('project:delete', id),
+    deleteFromDisk: (id: string, dirPath: string): Promise<boolean> => ipcRenderer.invoke('project:delete-from-disk', id, dirPath),
     openExplorer: (path: string): Promise<string> => ipcRenderer.invoke('project:open-explorer', path),
+    openVsCode: (path: string): Promise<boolean> => ipcRenderer.invoke('shell:open-vscode', path),
+    openCursor: (path: string): Promise<boolean> => ipcRenderer.invoke('shell:open-cursor', path),
+    openTerminal: (path: string): Promise<boolean> => ipcRenderer.invoke('shell:open-terminal', path),
   },
+
 
   // ── Git Version Control ───────────────────────────────────────────────────
 
@@ -123,6 +134,17 @@ const devverseAPI = {
     switchBranch: (projectPath: string, branchName: string): Promise<void> => ipcRenderer.invoke('git:switch-branch', projectPath, branchName),
     createBranch: (projectPath: string, branchName: string): Promise<void> => ipcRenderer.invoke('git:create-branch', projectPath, branchName),
     commit: (projectPath: string, message: string, filesToStage?: string[]): Promise<void> => ipcRenderer.invoke('git:commit', projectPath, message, filesToStage),
+    stageFile: (projectPath: string, filePath: string): Promise<void> => ipcRenderer.invoke('git:stage-file', projectPath, filePath),
+    unstageFile: (projectPath: string, filePath: string): Promise<void> => ipcRenderer.invoke('git:unstage-file', projectPath, filePath),
+    stageAll: (projectPath: string): Promise<void> => ipcRenderer.invoke('git:stage-all', projectPath),
+    unstageAll: (projectPath: string): Promise<void> => ipcRenderer.invoke('git:unstage-all', projectPath),
+    getFileDiff: (projectPath: string, filePath: string, staged?: boolean): Promise<string> => ipcRenderer.invoke('git:get-diff', projectPath, filePath, staged),
+    initRepo: (projectPath: string): Promise<void> => ipcRenderer.invoke('git:init', projectPath),
+    pull: (projectPath: string): Promise<void> => ipcRenderer.invoke('git:pull', projectPath),
+    push: (projectPath: string): Promise<void> => ipcRenderer.invoke('git:push', projectPath),
+    addRemote: (projectPath: string, remoteName: string, remoteUrl: string): Promise<any> => ipcRenderer.invoke('git:add-remote', projectPath, remoteName, remoteUrl),
+    setRemoteUrl: (projectPath: string, remoteName: string, remoteUrl: string): Promise<any> => ipcRenderer.invoke('git:set-remote-url', projectPath, remoteName, remoteUrl),
+    removeRemote: (projectPath: string, remoteName?: string): Promise<any> => ipcRenderer.invoke('git:remove-remote', projectPath, remoteName),
   },
 
   /**

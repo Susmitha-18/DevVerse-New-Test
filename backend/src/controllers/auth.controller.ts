@@ -32,17 +32,14 @@ import { RegisterInput, LoginInput } from '@/types/user.types';
  * POST /api/v1/auth/register
  * Create a new user account.
  */
-export const register = async (
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> => {
+export const register = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const body = req.body as Record<string, unknown>;
     const input: RegisterInput = {
-      fullName: req.body.fullName as string,
-      username: req.body.username as string,
-      email: req.body.email as string,
-      password: req.body.password as string,
+      fullName: body.fullName as string,
+      username: body.username as string,
+      email: body.email as string,
+      password: body.password as string,
     };
 
     const result = await authService.register(input);
@@ -59,29 +56,26 @@ export const register = async (
  * POST /api/v1/auth/login
  * Authenticate user and issue tokens.
  */
-export const login = async (
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> => {
+export const login = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const body = req.body as Record<string, unknown>;
     const input: LoginInput = {
-      email: req.body.email as string,
-      password: req.body.password as string,
-      rememberMe: req.body.rememberMe as boolean | undefined,
-      deviceId: req.body.deviceId as string | undefined,
-      deviceName: req.body.deviceName as string | undefined,
+      email: body.email as string,
+      password: body.password as string,
+      rememberMe: body.rememberMe as boolean | undefined,
+      deviceId: body.deviceId as string | undefined,
+      deviceName: body.deviceName as string | undefined,
       userAgent: req.headers['user-agent'] ?? '',
       ipAddress: (req.ip ?? req.socket.remoteAddress ?? '').replace('::ffff:', ''), // Normalize IPv4
     };
 
     const result = await authService.login(input);
 
-    // Set the refresh token in an httpOnly cookie
+    // Set the refresh token in an httpOnly cookie using explicit rememberMe setting
     res.cookie(
       'refreshToken',
       result.tokens.refreshToken,
-      getRefreshTokenCookieOptions(result.user.preferences?.theme !== undefined),
+      getRefreshTokenCookieOptions(Boolean(input.rememberMe)),
     );
 
     sendSuccess(
@@ -104,11 +98,7 @@ export const login = async (
  * POST /api/v1/auth/logout
  * Invalidate the current session.
  */
-export const logout = async (
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> => {
+export const logout = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const sessionId = req.user?.sessionId;
 
@@ -160,7 +150,7 @@ export const logoutAllDevices = async (
  * POST /api/v1/auth/refresh
  * Exchange a refresh token for a new access token.
  * The refresh token is read from the httpOnly cookie.
- * The sessionId is read from the request body (sent by the client).
+ * The sessionId is read from the request body or header.
  */
 export const refreshToken = async (
   req: Request,
@@ -168,26 +158,32 @@ export const refreshToken = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const rawRefreshToken = req.cookies['refreshToken'] as string | undefined;
-    const { sessionId } = req.body as { sessionId?: string };
+    const rawRefreshToken = req.cookies?.['refreshToken'] as string | undefined;
+    const bodySessionId = (req.body as { sessionId?: string })?.sessionId;
+    const headerSessionId = req.headers['x-session-id'] as string | undefined;
+    const sessionId = bodySessionId ?? headerSessionId;
 
-    if (!rawRefreshToken || !sessionId) {
-      throw new AppError(
-        'Session expired. Please log in again.',
-        HttpStatus.UNAUTHORIZED,
-      );
+    if (!rawRefreshToken) {
+      throw new AppError('Session expired. Please log in again.', HttpStatus.UNAUTHORIZED);
     }
 
     const newTokens = await authService.refreshAccessToken(rawRefreshToken, sessionId);
 
-    // Rotate the refresh token cookie
+    // Rotate the refresh token cookie preserving session rememberMe setting
     res.cookie(
       'refreshToken',
       newTokens.refreshToken,
-      getRefreshTokenCookieOptions(false), // Use default 7 days; original rememberMe is in session
+      getRefreshTokenCookieOptions(newTokens.rememberMe),
     );
 
-    sendSuccess(res, { accessToken: newTokens.accessToken }, 'Token refreshed successfully.');
+    sendSuccess(
+      res,
+      {
+        accessToken: newTokens.accessToken,
+        sessionId: newTokens.sessionId,
+      },
+      'Token refreshed successfully.',
+    );
   } catch (error) {
     next(error);
   }
@@ -200,11 +196,7 @@ export const refreshToken = async (
  * Return the currently authenticated user's data.
  * Requires the authenticate middleware.
  */
-export const getMe = async (
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> => {
+export const getMe = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const userId = req.user?.userId;
 
@@ -256,16 +248,19 @@ export const validateSession = async (
  * Returns a placeholder response to prevent 404.
  */
 export const forgotPassword = async (
-  _req: Request,
+  req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> => {
   try {
-    sendSuccess(
-      res,
-      null,
-      'If an account with this email exists, a password reset link has been sent.',
-    );
+    const body = req.body as Record<string, unknown>;
+    const email = body.email as string | undefined;
+    if (!email) {
+      throw new AppError('Email address is required', HttpStatus.BAD_REQUEST);
+    }
+
+    const message = await authService.sendPasswordResetOtp(email);
+    sendSuccess(res, null, message);
   } catch (error) {
     next(error);
   }

@@ -24,28 +24,53 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const checkAuth = useCallback(async (): Promise<boolean> => {
-    const token = localStorage.getItem('devverse_access_token');
-    if (!token) {
+    const signedIn = localStorage.getItem('devverse_signed_in');
+    if (signedIn !== 'true') {
       setUser(null);
       setIsLoading(false);
       return false;
     }
 
-    try {
-      const data = await authService.validateSession();
-      if (data.valid && data.user) {
-        setUser(data.user);
-        setIsLoading(false);
-        return true;
+    const token = localStorage.getItem('devverse_access_token');
+    
+    // Step 1: If access token exists, try fetching current user
+    if (token) {
+      try {
+        const data = await authService.getMe();
+        if (data.user) {
+          setUser(data.user);
+          setIsLoading(false);
+          return true;
+        }
+      } catch {
+        // Access token might be invalid/expired, proceed to proactive refresh attempt
       }
-      throw new Error('Invalid session');
-    } catch {
-      localStorage.removeItem('devverse_access_token');
-      localStorage.removeItem('devverse_session_id');
-      setUser(null);
-      setIsLoading(false);
-      return false;
     }
+
+    // Step 2: Proactive refresh attempt using httpOnly cookie
+    try {
+      const refreshed = await authService.refreshToken();
+      if (refreshed?.accessToken) {
+        localStorage.setItem('devverse_access_token', refreshed.accessToken);
+        if (refreshed.sessionId) {
+          localStorage.setItem('devverse_session_id', refreshed.sessionId);
+        }
+        const data = await authService.getMe();
+        if (data.user) {
+          setUser(data.user);
+          setIsLoading(false);
+          return true;
+        }
+      }
+    } catch {
+      // Session genuinely unauthenticated / expired
+    }
+
+    localStorage.removeItem('devverse_access_token');
+    localStorage.removeItem('devverse_session_id');
+    setUser(null);
+    setIsLoading(false);
+    return false;
   }, []);
 
   useEffect(() => {
@@ -56,6 +81,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     try {
       const data = await authService.login(payload);
+      localStorage.setItem('devverse_signed_in', 'true');
       localStorage.setItem('devverse_access_token', data.accessToken);
       localStorage.setItem('devverse_session_id', data.sessionId);
       setUser(data.user);
@@ -83,6 +109,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       await authService.logout();
     } finally {
+      localStorage.removeItem('devverse_signed_in');
+      localStorage.removeItem('devverse_access_token');
+      localStorage.removeItem('devverse_session_id');
       setUser(null);
       setIsLoading(false);
     }

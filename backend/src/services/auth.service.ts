@@ -25,21 +25,14 @@
  * This prevents refresh token reuse attacks.
  */
 
+import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { User } from '@/models/User.model';
 import { Session } from '@/models/Session.model';
-import {
-  RegisterInput,
-  LoginInput,
-  JwtPayload,
-  SafeUser,
-} from '@/types/user.types';
+import { RegisterInput, LoginInput, JwtPayload, SafeUser, AccountStatus } from '@/types/user.types';
 import { AppError, HttpStatus } from '@/types';
-import {
-  generateAccessToken,
-  generateRefreshToken,
-  verifyRefreshToken,
-} from '@/utils/jwt';
+import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '@/utils/jwt';
+import { sendUserPasswordResetOtpEmail } from '@/utils/email';
 import { logger } from '@/utils/logger';
 
 // ─── Return Types ─────────────────────────────────────────────────────────────
@@ -146,14 +139,14 @@ export async function login(input: LoginInput): Promise<LoginResult> {
   }
 
   // Check account status before verifying password (fail fast)
-  if (user.accountStatus === 'suspended') {
+  if (user.accountStatus === AccountStatus.SUSPENDED) {
     throw new AppError(
       'Your account has been suspended. Please contact support.',
       HttpStatus.FORBIDDEN,
     );
   }
 
-  if (user.accountStatus === 'deleted') {
+  if (user.accountStatus === AccountStatus.DELETED) {
     throw invalidCredentialsError; // Don't reveal account was deleted
   }
 
@@ -232,7 +225,9 @@ export async function logout(sessionId: string): Promise<void> {
  */
 export async function logoutAllDevices(userId: string): Promise<void> {
   const result = await Session.updateMany({ userId, isActive: true }, { isActive: false });
-  logger.info(`[Auth] All sessions invalidated for user ${userId}: ${result.modifiedCount} sessions`);
+  logger.info(
+    `[Auth] All sessions invalidated for user ${userId}: ${result.modifiedCount} sessions`,
+  );
 }
 
 // ─── Refresh Access Token ─────────────────────────────────────────────────────
@@ -251,38 +246,57 @@ export async function logoutAllDevices(userId: string): Promise<void> {
  */
 export async function refreshAccessToken(
   rawRefreshToken: string,
-  sessionId: string,
-): Promise<AuthTokens> {
-  // Find session WITH the refresh token (it's select: false by default)
-  const session = await Session.findById(sessionId).select('+refreshToken');
-
+  sessionId?: string,
+): Promise<AuthTokens & { rememberMe: boolean; sessionId: string }> {
   const invalidError = new AppError(
     'Invalid or expired session. Please log in again.',
     HttpStatus.UNAUTHORIZED,
   );
 
+  let session = null;
+
+  if (sessionId) {
+    session = await Session.findById(sessionId).select('+refreshToken');
+  }
+
+  if (!session) {
+    const candidateSessions = await Session.find({
+      isActive: true,
+      expiresAt: { $gt: new Date() },
+    }).select('+refreshToken');
+
+    for (const cand of candidateSessions) {
+      const match = await verifyRefreshToken(rawRefreshToken, cand.refreshToken);
+      if (match) {
+        session = cand;
+        break;
+      }
+    }
+  }
+
   if (!session || !session.isActive) {
     throw invalidError;
   }
 
-  // Check if session has expired (belt-and-suspenders — TTL should handle this)
+  // Check if session has expired
   if (session.expiresAt < new Date()) {
-    await Session.findByIdAndUpdate(sessionId, { isActive: false });
+    await Session.findByIdAndUpdate(session._id, { isActive: false });
     throw invalidError;
   }
 
-  // Verify the refresh token
+  // Verify the refresh token if found by sessionId
   const isValid = await verifyRefreshToken(rawRefreshToken, session.refreshToken);
   if (!isValid) {
-    // Possible token reuse attack — invalidate the session immediately
-    await Session.findByIdAndUpdate(sessionId, { isActive: false });
-    logger.warn(`[Auth] Refresh token mismatch detected for session ${sessionId} — possible reuse attack`);
+    await Session.findByIdAndUpdate(session._id, { isActive: false });
+    logger.warn(
+      `[Auth] Refresh token mismatch detected for session ${session._id.toString()} — possible reuse attack`,
+    );
     throw invalidError;
   }
 
   // Fetch the user for the JWT payload
   const user = await User.findById(session.userId);
-  if (!user || user.accountStatus !== 'active') {
+  if (!user || user.accountStatus !== AccountStatus.ACTIVE) {
     throw invalidError;
   }
 
@@ -302,7 +316,7 @@ export async function refreshAccessToken(
   const newExpiresAt = new Date();
   newExpiresAt.setDate(newExpiresAt.getDate() + (session.rememberMe ? 30 : 7));
 
-  await Session.findByIdAndUpdate(sessionId, {
+  await Session.findByIdAndUpdate(session._id, {
     refreshToken: newHashedRefreshToken,
     expiresAt: newExpiresAt,
   });
@@ -315,6 +329,8 @@ export async function refreshAccessToken(
   return {
     accessToken: newAccessToken,
     refreshToken: newRawRefreshToken,
+    rememberMe: Boolean(session.rememberMe),
+    sessionId: session._id.toString(),
   };
 }
 
@@ -327,7 +343,7 @@ export async function refreshAccessToken(
 export async function getMe(userId: string): Promise<SafeUser> {
   const user = await User.findById(userId);
 
-  if (!user || user.accountStatus === 'deleted') {
+  if (!user || user.accountStatus === AccountStatus.DELETED) {
     throw new AppError('User not found.', HttpStatus.NOT_FOUND);
   }
 
@@ -353,16 +369,49 @@ export async function validateSession(userId: string, sessionId: string): Promis
   });
 
   if (!session || session.expiresAt < new Date()) {
-    throw new AppError(
-      'Session expired. Please log in again.',
-      HttpStatus.UNAUTHORIZED,
-    );
+    throw new AppError('Session expired. Please log in again.', HttpStatus.UNAUTHORIZED);
   }
 
   const user = await User.findById(userId);
-  if (!user || user.accountStatus !== 'active') {
+  if (!user || user.accountStatus !== AccountStatus.ACTIVE) {
     throw new AppError('User not found or account inactive.', HttpStatus.UNAUTHORIZED);
   }
 
   return user.toSafeObject() as SafeUser;
+}
+
+// ─── Forgot Password (OTP Dispatch) ──────────────────────────────────────────
+
+/**
+ * Generate a 6-digit OTP code, save it with expiration to user, and dispatch email via Nodemailer.
+ */
+export async function sendPasswordResetOtp(email: string): Promise<string> {
+  const user = await User.findOne({ email: email.toLowerCase().trim() });
+
+  // Return generic message even if user not found for security enumeration protection
+  if (!user || user.accountStatus !== AccountStatus.ACTIVE) {
+    return 'If an account with this email exists, a password reset link has been sent.';
+  }
+
+  // Generate 6-digit numeric OTP code
+  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+  // Hash OTP before saving
+  const salt = await bcrypt.genSalt(10);
+  const hashedOtp = await bcrypt.hash(otpCode, salt);
+
+  user.passwordResetOtp = hashedOtp;
+  user.passwordResetExpires = expiresAt;
+  await user.save();
+
+  // Send real email via Nodemailer transport
+  await sendUserPasswordResetOtpEmail({
+    toEmail: user.email,
+    recipientName: user.fullName || user.username,
+    otpCode,
+  });
+
+  logger.info(`[Auth] Password reset OTP sent to ${user.email}`);
+  return 'If an account with this email exists, a password reset link has been sent.';
 }

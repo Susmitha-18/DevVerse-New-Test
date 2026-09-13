@@ -47,9 +47,7 @@ function handleDuplicateKeyError(err: { keyValue: Record<string, unknown> }): Ap
  * Mongoose ValidationError: schema-level validation failed.
  * e.g. required field missing.
  */
-function handleValidationError(err: {
-  errors: Record<string, { message: string }>;
-}): AppError {
+function handleValidationError(err: { errors: Record<string, { message: string }> }): AppError {
   const messages = Object.values(err.errors)
     .map((e) => e.message)
     .join('. ');
@@ -111,9 +109,14 @@ export const errorHandler = (
   _next: NextFunction,
 ): void => {
   // Cast to AppError — we'll normalize below if it's not one
-  let error = err instanceof AppError
-    ? err
-    : new AppError(err.message || 'Internal Server Error', HttpStatus.INTERNAL_SERVER_ERROR, false);
+  let error =
+    err instanceof AppError
+      ? err
+      : new AppError(
+          err.message || 'Internal Server Error',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+          false,
+        );
 
   // Log every error with the appropriate level
   if (error.statusCode >= 500) {
@@ -129,9 +132,7 @@ export const errorHandler = (
   if (errName === 'CastError') {
     error = handleCastError(err as unknown as { path: string; value: unknown });
   } else if (errCode === 11000) {
-    error = handleDuplicateKeyError(
-      err as unknown as { keyValue: Record<string, unknown> },
-    );
+    error = handleDuplicateKeyError(err as unknown as { keyValue: Record<string, unknown> });
   } else if (errName === 'ValidationError') {
     error = handleValidationError(
       err as unknown as { errors: Record<string, { message: string }> },

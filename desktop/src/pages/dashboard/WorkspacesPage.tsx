@@ -1,393 +1,478 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+/**
+ * WorkspacesPage — DevVerse Workspace Hub
+ *
+ * Clean reconstruction. Orchestrates workspace management.
+ * This page does NOT implement Git, Docker, AI, or any other DevVerse module.
+ * Those are navigated to via the Actions menu.
+ *
+ * Phase 1: Foundation — list, search, filter, cards, actions menu, rename, delete.
+ * Phase 2: New Workspace modal.
+ * Phase 3: Import Project modal.
+ * Phase 4+: Properties, Properties drawer, etc.
+ */
+
+import React, { useState, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+// Layout
 import { Sidebar } from '@/components/layout/Sidebar';
+
+// Types
 import { LocalProjectRecord } from '@/types/electron.types';
-import { CreateProjectModal } from '@/components/projects/CreateProjectModal';
-import { WorkspaceCard } from '@/components/projects/WorkspaceCard';
-import { WorkspaceHeader, FilterCategory, SortOption } from '@/components/projects/WorkspaceHeader';
-import { WorkspaceDetailsDrawer } from '@/components/projects/WorkspaceDetailsDrawer';
-import { WorkspaceSettingsModal } from '@/components/projects/WorkspaceSettingsModal';
-import { BulkActionsBar } from '@/components/projects/BulkActionsBar';
-import { WorkspaceStatusSummary } from '@/components/projects/WorkspaceStatusSummary';
-import { StorageAndStats } from '@/components/projects/StorageAndStats';
-import { RecentActivityFeed } from '@/components/projects/RecentActivityFeed';
+
+// Existing hooks (reused)
+import { useWorkspace } from '@/hooks/useWorkspace';
+import { useWorkspaceActions } from '@/hooks/useWorkspaceActions';
+import { useWorkspaceSearch } from '@/hooks/useWorkspaceSearch';
+import { useWorkspaceFilters } from '@/hooks/useWorkspaceFilters';
+
+// New WorkHub components
+import { WH_Header } from '@/components/workhub/WH_Header';
+import { WH_ActionBar } from '@/components/workhub/WH_ActionBar';
+import { WH_Summary } from '@/components/workhub/WH_Summary';
+import { WH_Filters } from '@/components/workhub/WH_Filters';
+import { WH_WorkspaceCard } from '@/components/workhub/WH_WorkspaceCard';
+import { WH_EmptyState } from '@/components/workhub/WH_EmptyState';
+import { WH_LoadingState } from '@/components/workhub/WH_LoadingState';
+import { WH_RenameModal } from '@/components/workhub/WH_RenameModal';
+import { WH_DeleteConfirm } from '@/components/workhub/WH_DeleteConfirm';
+import { WH_NewWorkspaceModal } from '@/components/workhub/WH_NewWorkspaceModal';
+import { WH_ImportFolderModal } from '@/components/workhub/WH_ImportFolderModal';
+import { WH_PropertiesModal } from '@/components/workhub/WH_PropertiesModal';
+import { WH_DirectoryScannerModal } from '@/components/workhub/WH_DirectoryScannerModal';
+import { SortOption, ViewMode } from '@/components/workhub/WH_ActionBar';
+import { DirectoryScanResult } from '@/types/electron.types';
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { useActiveWorkspace } from '@/context/ActiveWorkspaceContext';
 
 export const WorkspacesPage: React.FC = () => {
-  const [projects, setProjects] = useState<LocalProjectRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [showModal, setShowModal] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const navigate = useNavigate();
+  const { setActiveWorkspace } = useActiveWorkspace();
 
-  // Active Selected Workspace for Details & Settings
-  const [detailsWorkspace, setDetailsWorkspace] = useState<LocalProjectRecord | null>(null);
-  const [settingsWorkspace, setSettingsWorkspace] = useState<LocalProjectRecord | null>(null);
+  // ── Data & Core Hooks ──────────────────────────────────────────────────────
+  const {
+    projects,
+    loading,
+    refresh,
+    saveWorkspace,
+    removeWorkspace,
+    deleteWorkspaceFromDisk,
+  } = useWorkspace();
+  const actions = useWorkspaceActions(saveWorkspace, removeWorkspace);
 
-  // Controls & Bulk State
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [activeFilter, setActiveFilter] = useState<FilterCategory>('all');
-  const [activeSort, setActiveSort] = useState<SortOption>('modified');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // ── Search ─────────────────────────────────────────────────────────────────
+  const { searchQuery, setSearchQuery, searchedWorkspaces } = useWorkspaceSearch(projects);
 
-  const loadProjects = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      let list: LocalProjectRecord[] = [];
-      if (window.devverse?.projects) {
-        list = await window.devverse.projects.list();
-      }
+  // ── Filters (All / Favorites / Archived) ───────────────────────────────────
+  const { activeFilter, setActiveFilter, filteredWorkspaces } = useWorkspaceFilters(searchedWorkspaces);
 
-      const localStored: LocalProjectRecord[] = JSON.parse(localStorage.getItem('devverse_local_projects') || '[]');
-      const combinedMap = new Map<string, LocalProjectRecord>();
+  // ── Stats ──────────────────────────────────────────────────────────────────
+  // useWorkspaceStats(projects);
 
-      localStored.forEach((p) => combinedMap.set(p.path, p));
-      list.forEach((p) => combinedMap.set(p.path, p));
+  // ── Recent count (opened in last 7 days) ───────────────────────────────────
+  const recentCount = useMemo(() => {
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    return projects.filter(
+      (p) => !p.isArchived && new Date(p.lastOpenedAt || p.updatedAt).getTime() > cutoff
+    ).length;
+  }, [projects]);
 
-      setProjects(Array.from(combinedMap.values()));
-    } catch (err: unknown) {
-      console.warn('[Workspaces Load Error]:', err);
-      const localStored: LocalProjectRecord[] = JSON.parse(localStorage.getItem('devverse_local_projects') || '[]');
-      setProjects(localStored);
-    } finally {
-      setLoading(false);
+  // ── Filter counts ──────────────────────────────────────────────────────────
+  const nonArchivedCount = useMemo(
+    () => projects.filter((p) => !p.isArchived).length,
+    [projects]
+  );
+  const favoritesCount = useMemo(
+    () => projects.filter((p) => p.isFavorite && !p.isArchived).length,
+    [projects]
+  );
+  const archivedCount = useMemo(
+    () => projects.filter((p) => p.isArchived).length,
+    [projects]
+  );
+
+  // ── Modal States ───────────────────────────────────────────────────────────
+  const [showNewWorkspaceModal, setShowNewWorkspaceModal] = useState(false);
+  const [showImportFolderModal, setShowImportFolderModal] = useState(false);
+  const [showScannerModal, setShowScannerModal] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<LocalProjectRecord | null>(null);
+  const [propertiesTarget, setPropertiesTarget] = useState<LocalProjectRecord | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<LocalProjectRecord | null>(null);
+  const [deleteMode, setDeleteMode] = useState<'remove' | 'delete'>('remove');
+  const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
+
+  const existingPathsSet = useMemo(() => new Set(projects.map((p) => p.path)), [projects]);
+
+  // ── WorkHub Medium Controls State ──────────────────────────────────────────
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [sortBy, setSortBy] = useState<SortOption>('recent');
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+
+  // Extract unique tags
+  const availableTags = useMemo(() => {
+    const set = new Set<string>();
+    projects.forEach((p) => {
+      p.tags?.forEach((t) => set.add(t));
+    });
+    return Array.from(set);
+  }, [projects]);
+
+  // Apply Tag Filter & Sort
+  const processedWorkspaces = useMemo(() => {
+    let list = [...filteredWorkspaces];
+
+    // Filter by tag if selected
+    if (selectedTag) {
+      list = list.filter((p) => p.tags?.includes(selectedTag));
     }
+
+    // Sort
+    list.sort((a, b) => {
+      if (sortBy === 'recent') {
+        const timeA = new Date(a.lastOpenedAt || a.updatedAt).getTime();
+        const timeB = new Date(b.lastOpenedAt || b.updatedAt).getTime();
+        return timeB - timeA;
+      }
+      if (sortBy === 'name') {
+        return a.name.localeCompare(b.name);
+      }
+      if (sortBy === 'type') {
+        const stackA = a.framework || a.language || a.type || '';
+        const stackB = b.framework || b.language || b.type || '';
+        return stackA.localeCompare(stackB);
+      }
+      if (sortBy === 'created') {
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+      return 0;
+    });
+
+    return list;
+  }, [filteredWorkspaces, selectedTag, sortBy]);
+
+  const handleBatchImport = useCallback(async (scannedProjects: DirectoryScanResult[]) => {
+    const now = new Date().toISOString();
+    for (const p of scannedProjects) {
+      const record: LocalProjectRecord = {
+        id: crypto.randomUUID(),
+        name: p.name,
+        path: p.path,
+        type: p.type || 'unknown',
+        language: p.language || 'Plain Text',
+        framework: p.framework,
+        description: p.description || '',
+        tags: p.tags || [],
+        hasGit: p.hasGit,
+        gitBranch: p.gitBranch,
+        hasRemote: p.hasRemote,
+        remoteUrl: p.remoteUrl,
+        isGitHub: p.isGitHub,
+        hasDocker: p.hasDocker,
+        hasEnv: p.hasEnv,
+        hasCiCd: p.hasCiCd,
+        hasReadme: p.hasReadme,
+        hasPackageJson: p.hasPackageJson,
+        hasBuildFile: p.hasBuildFile,
+        healthStatus: p.healthStatus || 'healthy',
+        isFavorite: false,
+        isArchived: false,
+        projectSizeBytes: p.projectSizeBytes || 0,
+        totalFiles: p.totalFiles || 0,
+        dependenciesCount: p.dependenciesCount || 0,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await saveWorkspace(record);
+    }
+    void refresh();
+  }, [saveWorkspace, refresh]);
+
+  // ── Handlers ───────────────────────────────────────────────────────────────
+
+  const handleOpenWorkspace = useCallback(async (ws: LocalProjectRecord) => {
+    // 1. Update lastOpenedAt in SQLite
+    const updated = { ...ws, lastOpenedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    await saveWorkspace(updated);
+    // 2. Set as active workspace context
+    setActiveWorkspace(updated);
+    // 3. Navigate to Workspace Overview (NOT Properties modal)
+    void navigate('/dashboard/workspace');
+  }, [setActiveWorkspace, saveWorkspace, navigate]);
+
+  const handleToggleFavorite = useCallback((ws: LocalProjectRecord) => {
+    void actions.toggleFavorite(ws);
+  }, [actions]);
+
+  const handleArchive = useCallback((ws: LocalProjectRecord) => {
+    void actions.toggleArchive(ws);
+  }, [actions]);
+
+  const handleRename = useCallback((ws: LocalProjectRecord, newName: string) => {
+    void actions.renameWorkspace(ws, newName);
+  }, [actions]);
+
+  const handleExport = useCallback((ws: LocalProjectRecord) => {
+    actions.exportWorkspace(ws);
+  }, [actions]);
+
+  const handleRemove = useCallback((ws: LocalProjectRecord) => {
+    setDeleteMode('remove');
+    setDeleteTarget(ws);
   }, []);
 
-  useEffect(() => {
-    void loadProjects();
-  }, [loadProjects]);
+  const handleDelete = useCallback((ws: LocalProjectRecord) => {
+    setDeleteMode('delete');
+    setDeleteTarget(ws);
+  }, []);
 
-  const handleToggleSelect = (id: string) => {
-    const next = new Set(selectedIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setSelectedIds(next);
-  };
-
-  const handleSelectAll = () => {
-    const all = new Set(processedWorkspaces.map((p) => p.id));
-    setSelectedIds(all);
-  };
-
-  const handleDeselectAll = () => {
-    setSelectedIds(new Set());
-  };
-
-  const handleToggleFavorite = async (id: string, currentStatus: boolean) => {
-    const updated = projects.map((p) => (p.id === id ? { ...p, isFavorite: !currentStatus } : p));
-    setProjects(updated);
-
-    const target = updated.find((p) => p.id === id);
-    if (target && window.devverse?.projects) {
-      await window.devverse.projects.save(target);
-    }
-    localStorage.setItem('devverse_local_projects', JSON.stringify(updated));
-  };
-
-  const handleSaveSettings = async (updatedWorkspace: LocalProjectRecord) => {
-    const updated = projects.map((p) => (p.id === updatedWorkspace.id ? updatedWorkspace : p));
-    setProjects(updated);
-
-    if (window.devverse?.projects) {
-      await window.devverse.projects.save(updatedWorkspace);
-    }
-    localStorage.setItem('devverse_local_projects', JSON.stringify(updated));
-  };
-
-  const handleDeleteProject = async (workspace: LocalProjectRecord) => {
-    if (!confirm(`Are you sure you want to remove workspace "${workspace.name}" from DevVerse? (Disk files remain intact)`)) return;
-
-    try {
-      if (window.devverse?.projects) {
-        await window.devverse.projects.delete(workspace.id);
-      }
-      const updated = projects.filter((p) => p.id !== workspace.id && p.path !== workspace.path);
-      setProjects(updated);
-      localStorage.setItem('devverse_local_projects', JSON.stringify(updated));
-
-      if (detailsWorkspace?.id === workspace.id) setDetailsWorkspace(null);
-      if (settingsWorkspace?.id === workspace.id) setSettingsWorkspace(null);
-    } catch (err: unknown) {
-      alert((err as Error).message || 'Failed to delete workspace.');
-    }
-  };
-
-  // Bulk Handlers
-  const handleBulkFavorite = () => {
-    const updated = projects.map((p) => (selectedIds.has(p.id) ? { ...p, isFavorite: true } : p));
-    setProjects(updated);
-    localStorage.setItem('devverse_local_projects', JSON.stringify(updated));
-    setSelectedIds(new Set());
-  };
-
-  const handleBulkArchive = () => {
-    const updated = projects.map((p) => (selectedIds.has(p.id) ? { ...p, isArchived: true } : p));
-    setProjects(updated);
-    localStorage.setItem('devverse_local_projects', JSON.stringify(updated));
-    setSelectedIds(new Set());
-  };
-
-  const handleBulkExport = () => {
-    const selectedList = projects.filter((p) => selectedIds.has(p.id));
-    const jsonStr = JSON.stringify(selectedList, null, 2);
-    const blob = new Blob([jsonStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `devverse_workspaces_export_${Date.now()}.json`;
-    a.click();
-  };
-
-  const handleBulkOpen = () => {
-    const selectedList = projects.filter((p) => selectedIds.has(p.id));
-    selectedList.forEach((p) => {
-      void handleOpenExplorer(p.path);
-    });
-  };
-
-  const handleBulkDelete = () => {
-    if (!confirm(`Are you sure you want to delete ${selectedIds.size} selected workspaces?`)) return;
-    const updated = projects.filter((p) => !selectedIds.has(p.id));
-    setProjects(updated);
-    localStorage.setItem('devverse_local_projects', JSON.stringify(updated));
-    setSelectedIds(new Set());
-  };
-
-  const handleOpenExplorer = async (path: string) => {
-    if (window.devverse?.projects) {
-      await window.devverse.projects.openExplorer(path);
+  const handleConfirmDelete = useCallback((ws: LocalProjectRecord) => {
+    if (deleteMode === 'remove') {
+      void removeWorkspace(ws.id);
     } else {
-      alert(`Opening directory: ${path}`);
+      void deleteWorkspaceFromDisk(ws.id, ws.path);
     }
-  };
+  }, [deleteMode, removeWorkspace, deleteWorkspaceFromDisk]);
 
-  const showV2Placeholder = (featureName: string) => {
-    alert(`${featureName}: Coming in Version 2`);
-  };
+  const handleGit = useCallback((ws: LocalProjectRecord) => {
+    setActiveWorkspace(ws);
+    void navigate('/dashboard/git');
+  }, [setActiveWorkspace, navigate]);
 
-  // Favorites vs Regular Partition
-  const favoriteWorkspaces = useMemo(() => projects.filter((p) => p.isFavorite), [projects]);
+  const handleDocker = useCallback((ws: LocalProjectRecord) => {
+    setActiveWorkspace(ws);
+    setNoticeMessage(`Docker module integration for ${ws.name} will be available in the Advanced WorkHub milestone.`);
+  }, [setActiveWorkspace]);
 
-  // Filter & Search Engine
-  const processedWorkspaces = useMemo(() => {
-    let result = [...projects];
+  const handleAI = useCallback((ws: LocalProjectRecord) => {
+    setActiveWorkspace(ws);
+    setNoticeMessage(`AI DevOps assistant for ${ws.name} will be available in the Advanced WorkHub milestone.`);
+  }, [setActiveWorkspace]);
 
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(
-        (p) =>
-          p.name.toLowerCase().includes(q) ||
-          p.path.toLowerCase().includes(q) ||
-          p.language.toLowerCase().includes(q) ||
-          (p.framework && p.framework.toLowerCase().includes(q)) ||
-          (p.description && p.description.toLowerCase().includes(q)) ||
-          (p.tags && p.tags.some((t) => t.toLowerCase().includes(q))),
-      );
+  const handleProperties = useCallback((ws: LocalProjectRecord) => {
+    setPropertiesTarget(ws);
+  }, []);
+
+  const handleRefreshMetadata = useCallback(async (ws: LocalProjectRecord) => {
+    try {
+      await window.devverse?.projects?.rescan(ws.id, ws.path);
+      void refresh();
+    } catch (err) {
+      console.error('[WorkHub] Rescan failed:', err);
     }
+  }, [refresh]);
 
-    switch (activeFilter) {
-      case 'favorites':
-        result = result.filter((p) => p.isFavorite);
-        break;
-      case 'healthy':
-        result = result.filter((p) => p.healthStatus === 'healthy' || !p.healthStatus);
-        break;
-      case 'warning':
-        result = result.filter((p) => p.healthStatus === 'warning');
-        break;
-      case 'error':
-        result = result.filter((p) => p.healthStatus === 'error');
-        break;
-      case 'git':
-        result = result.filter((p) => p.hasGit);
-        break;
-      case 'docker':
-        result = result.filter((p) => p.hasDocker);
-        break;
-      case 'env':
-        result = result.filter((p) => p.hasEnv);
-        break;
-      case 'readme':
-        result = result.filter((p) => p.hasReadme);
-        break;
-      case 'running':
-        result = result.filter((p) => p.isRunning);
-        break;
-      case 'archived':
-        result = result.filter((p) => p.isArchived);
-        break;
-      default:
-        result = result.filter((p) => !p.isArchived);
-        break;
-    }
+  const handleCopyPath = useCallback((ws: LocalProjectRecord) => {
+    void navigator.clipboard.writeText(ws.path);
+  }, []);
 
-    result.sort((a, b) => {
-      let comparison = 0;
-      switch (activeSort) {
-        case 'name':
-          comparison = a.name.localeCompare(b.name);
-          break;
-        case 'created':
-          comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-          break;
-        case 'modified':
-          comparison = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
-          break;
-        case 'recently_opened':
-          comparison = new Date(a.lastOpenedAt || 0).getTime() - new Date(b.lastOpenedAt || 0).getTime();
-          break;
-        case 'size':
-          comparison = (a.projectSizeBytes || 0) - (b.projectSizeBytes || 0);
-          break;
-        case 'language':
-          comparison = a.language.localeCompare(b.language);
-          break;
-        case 'health':
-          const rank = { healthy: 1, warning: 2, error: 3 };
-          comparison = rank[a.healthStatus || 'healthy'] - rank[b.healthStatus || 'healthy'];
-          break;
-      }
-      return sortOrder === 'asc' ? comparison : -comparison;
-    });
+  const handleNewWorkspace = useCallback(() => {
+    setShowNewWorkspaceModal(true);
+  }, []);
 
-    return result;
-  }, [projects, searchQuery, activeFilter, activeSort, sortOrder]);
+  const handleWorkspaceCreated = useCallback(() => {
+    void refresh();
+  }, [refresh]);
+
+  // handleImportProject removed — WH_ImportFolderModal handles this workflow correctly.
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ flex: 1, display: 'flex', background: 'var(--bg-app)', overflow: 'hidden', minHeight: 0 }}>
+    <div
+      style={{
+        flex: 1,
+        display: 'flex',
+        background: 'var(--bg-app)',
+        overflow: 'hidden',
+        minHeight: 0,
+      }}
+    >
+      {/* Sidebar — unchanged */}
       <Sidebar />
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-        <main style={{ flex: 1, padding: '14px 20px', overflowY: 'auto' }}>
-          {/* 1. PRIMARY PRIORITY: WORKSPACE HEADER & FILTERS */}
-          <WorkspaceHeader
-            totalCount={projects.length}
-            filteredCount={processedWorkspaces.length}
-            viewMode={viewMode}
-            activeFilter={activeFilter}
-            activeSort={activeSort}
-            sortOrder={sortOrder}
-            onViewModeChange={setViewMode}
-            onFilterChange={setActiveFilter}
-            onSortChange={setActiveSort}
-            onToggleSortOrder={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-            onAddWorkspace={() => setShowModal(true)}
-            onCloneRepo={() => alert('Clone Git Repository: Select folder in wizard')}
-            onImportProject={() => setShowModal(true)}
-            onRefresh={() => void loadProjects()}
-          />
+      {/* Main content */}
+      <div
+        style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%',
+          overflow: 'hidden',
+          minWidth: 0,
+        }}
+      >
+        {/* ── Page Header ──────────────────────────────────────────────── */}
+        <WH_Header
+          workspaceCount={nonArchivedCount}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          onRefresh={() => void refresh()}
+          isLoading={loading}
+        />
 
-          {error && (
-            <div style={{ padding: '12px 16px', borderRadius: 8, background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.25)', color: '#fca5a5', fontSize: 12, marginBottom: 20 }}>
-              ⚠️ {error}
-            </div>
+        {/* ── Action Bar ───────────────────────────────────────────────── */}
+        <WH_ActionBar
+          onNewWorkspace={handleNewWorkspace}
+          onImportProject={() => setShowImportFolderModal(true)}
+          onScanDirectory={() => setShowScannerModal(true)}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          sortBy={sortBy}
+          onSortByChange={setSortBy}
+        />
+
+        {/* ── Summary Row ──────────────────────────────────────────────── */}
+        <WH_Summary
+          total={nonArchivedCount}
+          favorites={favoritesCount}
+          recent={recentCount}
+        />
+
+        {/* ── Filter Tabs ──────────────────────────────────────────────── */}
+        <WH_Filters
+          activeFilter={activeFilter}
+          onFilterChange={setActiveFilter}
+          totalCount={nonArchivedCount}
+          favoritesCount={favoritesCount}
+          archivedCount={archivedCount}
+          availableTags={availableTags}
+          selectedTag={selectedTag}
+          onTagSelect={setSelectedTag}
+        />
+
+        {/* ── Divider ──────────────────────────────────────────────────── */}
+        <div
+          style={{
+            height: 1,
+            background: 'var(--border-subtle)',
+            margin: '14px 24px 0',
+            flexShrink: 0,
+          }}
+        />
+
+        {/* ── Scrollable Content Area ───────────────────────────────────── */}
+        <div
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: '16px 24px 24px',
+          }}
+        >
+          {/* Loading State */}
+          {loading && <WH_LoadingState count={6} />}
+
+          {/* Empty / No-Results States */}
+          {!loading && processedWorkspaces.length === 0 && (
+            <WH_EmptyState
+              filter={activeFilter}
+              hasWorkspaces={projects.length > 0}
+              searchQuery={searchQuery}
+              onCreateWorkspace={handleNewWorkspace}
+              onImportProject={() => setShowImportFolderModal(true)}
+              onClearSearch={() => setSearchQuery('')}
+            />
           )}
 
-          {/* 2. PRIMARY PRIORITY: WORKSPACE CARDS GRID / LIST */}
-          {loading ? (
-            <div style={{ color: 'var(--accent-cyan)', fontSize: 13, fontWeight: 600, padding: 20 }}>
-              Scanning local developer workspaces...
-            </div>
-          ) : processedWorkspaces.length === 0 ? (
-            <div className="enterprise-card" style={{ padding: 48, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, marginTop: 20 }}>
-              <div style={{ fontSize: 36 }}>📁</div>
-              <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>No Workspaces Found</h3>
-              <p style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 400 }}>
-                {searchQuery || activeFilter !== 'all'
-                  ? 'No local workspaces match your filter criteria or search query.'
-                  : 'Add a local project folder to organize Git repositories, Docker containers, and environment files.'}
-              </p>
-              <button
-                onClick={() => setShowModal(true)}
-                style={{ padding: '9px 18px', borderRadius: 8, background: 'var(--bg-elevated)', border: '1px solid var(--border-medium)', color: 'var(--text-primary)', fontWeight: 600, fontSize: 12, cursor: 'pointer', marginTop: 8 }}
-              >
-                + Add Workspace
-              </button>
-            </div>
-          ) : viewMode === 'grid' ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))', gap: 16 }}>
+          {/* Workspace Grid / List */}
+          {!loading && processedWorkspaces.length > 0 && (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: viewMode === 'grid' ? 'repeat(auto-fill, minmax(280px, 1fr))' : '1fr',
+                gap: viewMode === 'grid' ? 12 : 8,
+              }}
+            >
               {processedWorkspaces.map((ws) => (
-                <WorkspaceCard
+                <WH_WorkspaceCard
                   key={ws.id}
                   workspace={ws}
-                  viewMode="grid"
-                  isSelectable
-                  isSelected={selectedIds.has(ws.id)}
-                  onToggleSelect={handleToggleSelect}
+                  viewMode={viewMode}
+                  onOpenWorkspace={handleOpenWorkspace}
+                  onOpenFolder={(path) => void actions.openFolder(path)}
+                  onOpenTerminal={(path) => void actions.openTerminal(path)}
+                  onOpenVsCode={(path) => void actions.openVsCode(path)}
+                  onOpenCursor={(path) => void actions.openCursor(path)}
                   onToggleFavorite={handleToggleFavorite}
-                  onOpenFolder={handleOpenExplorer}
-                  onViewDetails={setDetailsWorkspace}
-                  onOpenSettings={setSettingsWorkspace}
-                  onDelete={handleDeleteProject}
+                  onRename={(w) => setRenameTarget(w)}
+                  onArchive={handleArchive}
+                  onProperties={handleProperties}
+                  onRefreshMetadata={handleRefreshMetadata}
+                  onCopyPath={handleCopyPath}
+                  onGit={handleGit}
+                  onDocker={handleDocker}
+                  onAI={handleAI}
+                  onExport={handleExport}
+                  onRemove={handleRemove}
+                  onDelete={handleDelete}
                 />
               ))}
             </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {processedWorkspaces.map((ws) => (
-                <WorkspaceCard
-                  key={ws.id}
-                  workspace={ws}
-                  viewMode="list"
-                  isSelectable
-                  isSelected={selectedIds.has(ws.id)}
-                  onToggleSelect={handleToggleSelect}
-                  onToggleFavorite={handleToggleFavorite}
-                  onOpenFolder={handleOpenExplorer}
-                  onViewDetails={setDetailsWorkspace}
-                  onOpenSettings={setSettingsWorkspace}
-                  onDelete={handleDeleteProject}
-                />
-              ))}
-            </div>
           )}
-
-          {/* 3. SECONDARY PRIORITY: RECENT ACTIVITY FEED */}
-          <RecentActivityFeed />
-
-          {/* 4. TERTIARY PRIORITY: STORAGE INFORMATION & TECH STATISTICS */}
-          <StorageAndStats workspaces={projects} />
-        </main>
+        </div>
       </div>
 
-      <CreateProjectModal
-        isOpen={showModal}
-        onClose={() => setShowModal(false)}
-        onSuccess={() => void loadProjects()}
+      {/* ── Modals ────────────────────────────────────────────────────── */}
+
+      {/* New Workspace Modal */}
+      <WH_NewWorkspaceModal
+        isOpen={showNewWorkspaceModal}
+        onClose={() => setShowNewWorkspaceModal(false)}
+        onCreated={handleWorkspaceCreated}
+        saveWorkspace={saveWorkspace}
       />
 
-      <WorkspaceDetailsDrawer
-        workspace={detailsWorkspace}
-        isOpen={Boolean(detailsWorkspace)}
-        onClose={() => setDetailsWorkspace(null)}
-        onOpenFolder={handleOpenExplorer}
-        onOpenSettings={(w) => {
-          setDetailsWorkspace(null);
-          setSettingsWorkspace(w);
-        }}
+      {/* Single Import Folder Modal */}
+      <WH_ImportFolderModal
+        isOpen={showImportFolderModal}
+        onClose={() => setShowImportFolderModal(false)}
+        onImported={handleWorkspaceCreated}
+        saveWorkspace={saveWorkspace}
       />
 
-      <WorkspaceSettingsModal
-        workspace={settingsWorkspace}
-        isOpen={Boolean(settingsWorkspace)}
-        onClose={() => setSettingsWorkspace(null)}
-        onSave={handleSaveSettings}
-        onDelete={handleDeleteProject}
+      {/* Directory Scanner & Batch Importer Modal */}
+      <WH_DirectoryScannerModal
+        isOpen={showScannerModal}
+        onClose={() => setShowScannerModal(false)}
+        onBatchImport={handleBatchImport}
+        existingPaths={existingPathsSet}
       />
 
-      <BulkActionsBar
-        selectedCount={selectedIds.size}
-        totalCount={processedWorkspaces.length}
-        onSelectAll={handleSelectAll}
-        onDeselectAll={handleDeselectAll}
-        onBulkFavorite={handleBulkFavorite}
-        onBulkArchive={handleBulkArchive}
-        onBulkExport={handleBulkExport}
-        onBulkOpen={handleBulkOpen}
-        onBulkDelete={handleBulkDelete}
-        onV2FeatureClick={showV2Placeholder}
+      {/* Rename Modal */}
+      <WH_RenameModal
+        workspace={renameTarget}
+        onConfirm={handleRename}
+        onClose={() => setRenameTarget(null)}
       />
+
+      {/* Remove / Delete Confirm */}
+      <WH_DeleteConfirm
+        workspace={deleteTarget}
+        mode={deleteMode}
+        onConfirm={handleConfirmDelete}
+        onClose={() => setDeleteTarget(null)}
+      />
+
+      {/* Properties Modal */}
+      <WH_PropertiesModal
+        workspace={propertiesTarget}
+        isOpen={!!propertiesTarget}
+        onClose={() => setPropertiesTarget(null)}
+      />
+
+      {/* Notice / Coming Soon Modal */}
+      {noticeMessage && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setNoticeMessage(null)}>
+          <div style={{ background: '#111318', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: 24, maxWidth: 420, width: '90%', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+            <h4 style={{ margin: '0 0 12px', color: '#f0f2f8', fontSize: 16 }}>DevVerse V1 Feature Notice</h4>
+            <p style={{ margin: '0 0 20px', color: '#9aa3bc', fontSize: 13, lineHeight: 1.5 }}>{noticeMessage}</p>
+            <button onClick={() => setNoticeMessage(null)} style={{ background: '#38bdf8', color: '#000', border: 'none', borderRadius: 6, padding: '8px 18px', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Got it</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

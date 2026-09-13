@@ -60,26 +60,6 @@ const navItems: NavItem[] = [
     ),
   },
   {
-    id: 'deploy',
-    label: 'Deployments',
-    path: '/dashboard/deploy',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <polygon points="12 2 19 21 12 17 5 21 12 2" />
-      </svg>
-    ),
-  },
-  {
-    id: 'monitor',
-    label: 'Telemetry',
-    path: '/dashboard/monitor',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-      </svg>
-    ),
-  },
-  {
     id: 'ai',
     label: 'AI Co-Pilot',
     path: '/dashboard/ai',
@@ -106,7 +86,7 @@ const navItems: NavItem[] = [
 export const Sidebar: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { settings } = useTheme();
   const [isCollapsed, setIsCollapsed] = React.useState(false);
 
@@ -235,6 +215,84 @@ export const Sidebar: React.FC = () => {
           );
         })}
       </nav>
+
+      {/* User Account & Logout Footer */}
+      <div
+        style={{
+          padding: isCollapsed ? '12px 6px' : '12px',
+          borderTop: '1px solid var(--border-subtle)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            justifyContent: isCollapsed ? 'center' : 'flex-start',
+          }}
+        >
+          <div
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, var(--accent-primary) 0%, #2563eb 100%)',
+              color: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 12,
+              fontWeight: 700,
+              flexShrink: 0,
+            }}
+          >
+            {user?.fullName?.charAt(0).toUpperCase() || user?.username?.charAt(0).toUpperCase() || 'U'}
+          </div>
+          {!isCollapsed && (
+            <div style={{ overflow: 'hidden', flex: 1 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                {user?.fullName || user?.username || 'Developer'}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                {user?.email || 'dev@devverse.app'}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <button
+          onClick={() => void logout()}
+          title="Sign Out"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: isCollapsed ? 'center' : 'flex-start',
+            gap: 10,
+            width: '100%',
+            padding: isCollapsed ? '8px 0' : '7px 10px',
+            borderRadius: 6,
+            background: 'transparent',
+            border: 'none',
+            color: '#ef4444',
+            cursor: 'pointer',
+            fontSize: 12,
+            fontWeight: 500,
+            transition: 'background 0.15s ease',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+          {!isCollapsed && <span>Sign Out</span>}
+        </button>
+      </div>
     </aside>
   );
 };

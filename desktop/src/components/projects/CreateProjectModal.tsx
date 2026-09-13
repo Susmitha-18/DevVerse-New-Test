@@ -189,11 +189,17 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, 
 
       let saved: LocalProjectRecord;
       if (window.devverse?.projects) {
+        if (window.devverse.projects.getByPath) {
+          const existingPath = await window.devverse.projects.getByPath(projectPayload.path);
+          if (existingPath) {
+            setError('A workspace with this directory path already exists in DevVerse.');
+            setLoading(false);
+            return;
+          }
+        }
         saved = await window.devverse.projects.save(projectPayload);
       } else {
         saved = { ...projectPayload, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-        const existing = JSON.parse(localStorage.getItem('devverse_local_projects') || '[]');
-        localStorage.setItem('devverse_local_projects', JSON.stringify([saved, ...existing]));
       }
 
       onSuccess(saved);
@@ -364,7 +370,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, 
                   ref={hiddenFileInputRef}
                   onChange={handleFolderInputChange}
                   style={{ display: 'none' }}
-                  {...({ webkitdirectory: '', directory: '' } as any)}
+                  {...({ webkitdirectory: '', directory: '' } as Record<string, string>)}
                 />
               </div>
 

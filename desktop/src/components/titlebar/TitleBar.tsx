@@ -119,19 +119,7 @@ const SearchIcon = () => (
   </svg>
 );
 
-const BellIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-  </svg>
-);
 
-const SettingsIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <circle cx="12" cy="12" r="3" />
-    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-  </svg>
-);
 
 // ─── Dropdown menu popup ──────────────────────────────────────────────────────
 
@@ -207,53 +195,70 @@ const MenuDropdown: React.FC<{
   </div>
 );
 
-// ─── Icon button helper ───────────────────────────────────────────────────────
+// ─── Service Status Badge ───────────────────────────────────────────────────
 
-const TitleBarIconBtn: React.FC<{
-  id: string;
-  label: string;
-  onClick?: () => void;
-  children: React.ReactNode;
-  badge?: boolean;
-}> = ({ id, label, onClick, children, badge }) => {
-  const [hover, setHover] = useState(false);
+import { authService } from '@/services/auth.service';
+
+const ServiceStatusIndicator: React.FC = () => {
+  const navigate = useNavigate();
+  const [backendReady, setBackendReady] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const checkConnection = async () => {
+      try {
+        const health = await authService.checkHealth();
+        if (isMounted) setBackendReady(health && health.backend === 'ready');
+      } catch {
+        if (isMounted) setBackendReady(false);
+      }
+    };
+
+    void checkConnection();
+    const interval = setInterval(() => {
+      void checkConnection();
+    }, 15000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const isReady = backendReady === true;
+
   return (
-    <button
-      id={id}
-      aria-label={label}
-      onClick={onClick}
+    <div
+      onClick={() => void navigate('/dashboard/settings/system-health')}
+      title={isReady ? 'DevVerse Services: Connected & Ready. Click for System Health' : 'DevVerse Services: Backend Offline. Local WorkHub available.'}
       className="titlebar-no-drag"
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
       style={{
-        position: 'relative',
-        width: 30,
-        height: 30,
-        borderRadius: 6,
-        background: hover ? 'var(--bg-hover)' : 'transparent',
-        border: 'none',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center',
+        gap: 6,
+        padding: '3px 9px',
+        borderRadius: 4,
+        background: isReady ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+        border: `1px solid ${isReady ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
+        fontSize: 11,
+        fontWeight: 600,
+        color: isReady ? '#34d399' : '#fbbf24',
+        marginRight: 6,
+        letterSpacing: '0.02em',
         cursor: 'pointer',
-        color: hover ? 'var(--titlebar-text)' : 'var(--titlebar-icon)',
-        transition: 'background 0.1s, color 0.1s',
-        flexShrink: 0,
       }}
     >
-      {children}
-      {badge && (
-        <span style={{
-          position: 'absolute',
-          top: 5,
-          right: 5,
-          width: 5,
-          height: 5,
+      <span
+        style={{
+          width: 7,
+          height: 7,
           borderRadius: '50%',
-          background: 'var(--accent-primary)',
-        }} />
-      )}
-    </button>
+          background: isReady ? '#34d399' : '#f59e0b',
+          boxShadow: isReady ? '0 0 8px #34d399' : '0 0 8px #f59e0b',
+        }}
+      />
+      {isReady ? 'Services Ready' : 'Offline Mode'}
+    </div>
   );
 };
 
@@ -262,7 +267,7 @@ const TitleBarIconBtn: React.FC<{
 export const TitleBar: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout } = useAuth();
+  useAuth();
 
   const isAuthPage = ['/', '/welcome', '/login', '/register', '/forgot-password'].includes(location.pathname);
 
@@ -271,8 +276,8 @@ export const TitleBar: React.FC = () => {
   const [openMenu, setOpenMenu]           = useState<string | null>(null);
   const [searchQuery, setSearchQuery]     = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [showProfile, setShowProfile]     = useState(false);
+  const [, setShowNotifications]          = useState(false);
+  const [, setShowProfile]                = useState(false);
   const [closeHover, setCloseHover]       = useState(false);
   const [maxHover,   setMaxHover]         = useState(false);
   const [minHover,   setMinHover]         = useState(false);
@@ -308,11 +313,6 @@ export const TitleBar: React.FC = () => {
   const handleMinimize = () => void window.devverse?.minimize();
   const handleMaximize = () => void window.devverse?.toggleMaximize();
   const handleClose    = () => void window.devverse?.quit();
-
-  // ── User initials ──────────────────────────────────────────────────────────
-  const initials = user?.fullName
-    ? user.fullName.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
-    : 'DV';
 
   // ── Menu item hover handling for keyboard-style traversal ─────────────────
   const handleMenuBtnHover = (id: string) => {
@@ -509,8 +509,10 @@ export const TitleBar: React.FC = () => {
           ════════════════════════════════════════════════════ */}
       <div
         className="titlebar-no-drag"
-        style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto', gap: 2, paddingRight: 0 }}
+        style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto', gap: 8, paddingRight: 0 }}
       >
+        {/* DevVerse Service Status Indicator */}
+        <ServiceStatusIndicator />
 
         {/* ── Window Controls ─────────────────────────────────────────────── */}
         <div style={{ display: 'flex', alignItems: 'center', height: TITLEBAR_HEIGHT, marginLeft: 2, zIndex: 9999, position: 'relative', WebkitAppRegion: 'no-drag' } as React.CSSProperties}>

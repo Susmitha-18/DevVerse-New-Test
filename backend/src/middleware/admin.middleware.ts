@@ -29,10 +29,7 @@ declare global {
 export const requireAdmin = (req: Request, _res: Response, next: NextFunction): void => {
   if (!req.user || req.user.role !== UserRole.ADMIN) {
     // Return 404 Route Not Found to prevent route enumeration by normal users
-    throw new AppError(
-      `Route not found: ${req.method} ${req.originalUrl}`,
-      HttpStatus.NOT_FOUND,
-    );
+    throw new AppError(`Route not found: ${req.method} ${req.originalUrl}`, HttpStatus.NOT_FOUND);
   }
   next();
 };

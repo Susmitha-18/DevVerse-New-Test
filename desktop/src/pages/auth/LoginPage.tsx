@@ -1,5 +1,5 @@
 /**
- * Enterprise Login Page — DevVerse Desktop
+ * Login Page — DevVerse Desktop
  */
 
 import React, { useState } from 'react';
@@ -15,7 +15,6 @@ export const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
-
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -30,28 +29,13 @@ export const LoginPage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      await login({
-        email: email.trim(),
-        password,
-        rememberMe,
-      });
+      await login({ email: email.trim(), password, rememberMe });
       void navigate('/dashboard', { replace: true });
     } catch (err: unknown) {
       setError((err as Error).message || 'Invalid authentication credentials.');
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const inputStyle: React.CSSProperties = {
-    width: '100%',
-    padding: '10px 12px',
-    borderRadius: 8,
-    background: 'var(--bg-app)',
-    border: '1px solid var(--border-subtle)',
-    color: 'var(--text-primary)',
-    fontSize: 13,
-    outline: 'none',
   };
 
   return (
@@ -62,60 +46,89 @@ export const LoginPage: React.FC = () => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'radial-gradient(ellipse at 50% 20%, #0f172a 0%, #070709 70%)',
-        padding: 24,
+        background: 'radial-gradient(ellipse at 50% 0%, #0d1b2e 0%, #070709 65%)',
+        fontFamily: "'Inter', system-ui, sans-serif",
       }}
     >
       <div
-        className="enterprise-glass"
         style={{
           width: '100%',
           maxWidth: 400,
           borderRadius: 16,
-          padding: 32,
-          display: 'flex',
-          flexDirection: 'column',
-          boxShadow: '0 25px 60px rgba(0,0,0,0.6)',
+          padding: '36px 32px 28px',
+          background: 'rgba(14, 15, 20, 0.9)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          backdropFilter: 'blur(20px)',
+          boxShadow: '0 24px 64px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04) inset',
         }}
       >
-        <div style={{ textAlign: 'center', marginBottom: 20 }}>
+        {/* Logo + Title */}
+        <div style={{ textAlign: 'center', marginBottom: 28 }}>
           <img
             src={nmarsLogo}
-            alt="N-MARS Logo"
-            style={{
-              width: 76,
-              height: 'auto',
-              objectFit: 'contain',
-              margin: '0 auto 12px',
-            }}
+            alt="DevVerse"
+            style={{ width: 68, height: 'auto', objectFit: 'contain', marginBottom: 16 }}
           />
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
-            Sign In to DevVerse
-          </h2>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            Enter your credentials to access your desktop workspace
+          <h1
+            style={{
+              fontSize: 22,
+              fontWeight: 700,
+              color: '#f0f2f8',
+              letterSpacing: '-0.03em',
+              margin: '0 0 6px',
+              fontFamily: "'Inter', system-ui, sans-serif",
+            }}
+          >
+            Sign in to DevVerse
+          </h1>
+          <p
+            style={{
+              fontSize: 13,
+              color: '#6b748a',
+              margin: 0,
+              lineHeight: 1.5,
+              fontFamily: "'Inter', system-ui, sans-serif",
+            }}
+          >
+            Access your developer workspace
           </p>
         </div>
 
+        {/* Error Banner */}
         {error && (
           <div
             style={{
-              padding: '10px 12px',
+              padding: '10px 13px',
               borderRadius: 8,
               background: 'rgba(239, 68, 68, 0.1)',
               border: '1px solid rgba(239, 68, 68, 0.25)',
               color: '#fca5a5',
               fontSize: 12,
-              marginBottom: 16,
+              lineHeight: 1.5,
+              marginBottom: 18,
+              fontFamily: "'Inter', system-ui, sans-serif",
             }}
           >
             {error}
           </div>
         )}
 
-        <form onSubmit={(e) => void handleSubmit(e)} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <form onSubmit={(e) => void handleSubmit(e)} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Email */}
           <div>
-            <label htmlFor="login-email" style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>
+            <label
+              htmlFor="login-email"
+              style={{
+                display: 'block',
+                fontSize: 11,
+                fontWeight: 600,
+                color: '#9aa3bc',
+                marginBottom: 6,
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase',
+                fontFamily: "'Inter', system-ui, sans-serif",
+              }}
+            >
               Email Address
             </label>
             <input
@@ -125,39 +138,81 @@ export const LoginPage: React.FC = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="developer@example.com"
-              style={inputStyle}
+              autoComplete="email"
+              style={{
+                width: '100%',
+                padding: '10px 13px',
+                borderRadius: 8,
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.10)',
+                color: '#f0f2f8',
+                fontSize: 13,
+                fontFamily: "'Inter', system-ui, sans-serif",
+                outline: 'none',
+                transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+                boxSizing: 'border-box',
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = 'rgba(56,189,248,0.5)';
+                e.currentTarget.style.boxShadow = '0 0 0 3px rgba(56,189,248,0.12)';
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)';
+                e.currentTarget.style.boxShadow = 'none';
+              }}
             />
           </div>
 
+          {/* Password */}
           <PasswordInput
             id="login-password"
             label="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            autoComplete="current-password"
             labelRight={
               <span
                 onClick={() => void navigate('/forgot-password')}
-                style={{ fontSize: 11, color: 'var(--accent-primary)', cursor: 'pointer' }}
+                style={{
+                  fontSize: 11,
+                  color: '#38bdf8',
+                  cursor: 'pointer',
+                  fontFamily: "'Inter', system-ui, sans-serif",
+                  fontWeight: 500,
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.textDecoration = 'underline')}
+                onMouseLeave={(e) => (e.currentTarget.style.textDecoration = 'none')}
               >
-                Forgot?
+                Forgot password?
               </span>
             }
           />
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Remember me */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
             <input
               id="remember-me"
               type="checkbox"
               checked={rememberMe}
               onChange={(e) => setRememberMe(e.target.checked)}
-              style={{ accentColor: '#38bdf8', cursor: 'pointer' }}
+              style={{ accentColor: '#38bdf8', cursor: 'pointer', width: 14, height: 14 }}
             />
-            <label htmlFor="remember-me" style={{ fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer' }}>
-              Remember device for 30 days
+            <label
+              htmlFor="remember-me"
+              style={{
+                fontSize: 12,
+                color: '#9aa3bc',
+                cursor: 'pointer',
+                fontFamily: "'Inter', system-ui, sans-serif",
+                userSelect: 'none',
+              }}
+            >
+              Stay signed in for 30 days
             </label>
           </div>
 
+          {/* Submit */}
           <button
             type="submit"
             disabled={isSubmitting}
@@ -165,25 +220,52 @@ export const LoginPage: React.FC = () => {
               width: '100%',
               padding: '11px',
               borderRadius: 8,
-              background: isSubmitting ? '#334155' : 'linear-gradient(135deg, #38bdf8 0%, #2563eb 100%)',
-              color: '#ffffff',
-              fontWeight: 600,
-              fontSize: 13,
+              background: isSubmitting
+                ? '#1e293b'
+                : 'linear-gradient(135deg, #38bdf8 0%, #2563eb 100%)',
+              color: isSubmitting ? '#64748b' : '#ffffff',
+              fontWeight: 700,
+              fontSize: 14,
+              fontFamily: "'Inter', system-ui, sans-serif",
               border: 'none',
               cursor: isSubmitting ? 'not-allowed' : 'pointer',
-              marginTop: 6,
-              boxShadow: '0 4px 14px rgba(56,189,248,0.25)',
+              letterSpacing: '-0.01em',
+              boxShadow: isSubmitting ? 'none' : '0 4px 16px rgba(56,189,248,0.28)',
+              transition: 'all 0.15s ease',
+            }}
+            onMouseEnter={(e) => {
+              if (!isSubmitting) e.currentTarget.style.boxShadow = '0 6px 20px rgba(56,189,248,0.38)';
+            }}
+            onMouseLeave={(e) => {
+              if (!isSubmitting) e.currentTarget.style.boxShadow = '0 4px 16px rgba(56,189,248,0.28)';
             }}
           >
-            {isSubmitting ? 'Authenticating...' : 'Sign In'}
+            {isSubmitting ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
 
-        <div style={{ textAlign: 'center', marginTop: 20, fontSize: 12, color: 'var(--text-muted)' }}>
+        {/* Footer */}
+        <div
+          style={{
+            textAlign: 'center',
+            marginTop: 22,
+            fontSize: 12,
+            color: '#6b748a',
+            fontFamily: "'Inter', system-ui, sans-serif",
+            lineHeight: 1.5,
+          }}
+        >
           Don't have an account?{' '}
           <span
             onClick={() => void navigate('/register')}
-            style={{ color: 'var(--accent-cyan)', fontWeight: 600, cursor: 'pointer' }}
+            style={{
+              color: '#38bdf8',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'opacity 0.15s ease',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.8')}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
           >
             Create account
           </span>

@@ -7,11 +7,14 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
 
 import { env } from '@/config/env';
 import { morganStream } from '@/utils/logger';
 import { errorHandler } from '@/middleware/errorHandler';
 import { notFound } from '@/middleware/notFound';
+
+import { getDatabaseStatus } from '@/database/connection';
 
 import authRoutes from '@/routes/auth.routes';
 import adminRoutes from '@/routes/admin.routes';
@@ -36,33 +39,50 @@ export function createApp(): Application {
       },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'x-refresh-token', 'x-nmars-vault-token'],
+      allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'x-refresh-token',
+        'x-session-id',
+        'x-nmars-vault-token',
+      ],
     }),
   );
 
   // ── 3. Request Parsers & Body Limit ───────────────────────────────────────
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+  app.use(cookieParser());
 
   // ── 4. Compression ────────────────────────────────────────────────────────
   app.use(compression());
 
   // ── 5. Logging ────────────────────────────────────────────────────────────
-  app.use(morgan(':method :url :status :res[content-length] - :response-time ms', { stream: morganStream }));
+  app.use(
+    morgan(':method :url :status :res[content-length] - :response-time ms', {
+      stream: morganStream,
+    }),
+  );
 
   // ── 6. Health Checks ──────────────────────────────────────────────────────
-  app.get('/health', (_req: Request, res: Response) => {
+  const handleHealth = (_req: Request, res: Response): void => {
+    const dbStatus = getDatabaseStatus();
     res.status(200).json({
       status: 'success',
       message: 'DevVerse API is healthy',
       data: {
+        backend: 'ready',
+        database: dbStatus,
         environment: env.NODE_ENV,
         version: env.APP_VERSION,
         timestamp: new Date().toISOString(),
         uptimeSeconds: Math.floor(process.uptime()),
       },
     });
-  });
+  };
+
+  app.get('/health', handleHealth);
+  app.get('/api/v1/health', handleHealth);
 
   // Feature routes
   app.use('/api/v1/auth', authRoutes);

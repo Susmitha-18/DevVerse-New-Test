@@ -42,7 +42,7 @@ export const PasswordInput: React.FC<PasswordInputProps> = ({
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', ...containerStyle }}>
       {label && (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-          <label htmlFor={id} style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>
+          <label htmlFor={id} style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '0.04em', textTransform: 'uppercase' as const }}>
             {label}
           </label>
           {labelRight}
